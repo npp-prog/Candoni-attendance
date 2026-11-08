@@ -10,6 +10,8 @@ import { Alert, Badge, Button, Card, Modal, useAsync } from '../../components/ui
 import { useSession } from '../../context/AuthContext';
 import { auth, db } from '../../firebase';
 import { detectPlatform } from '../../lib/geolocation';
+import { callApi, type TodayData } from '../../lib/api';
+import { PhoneRegistrationCard } from '../../components/PhoneRegistration';
 
 export default function Profile() {
   const { member, org, orgId, departments, tz, logout, user } = useSession();
@@ -31,6 +33,7 @@ export default function Profile() {
     return { schedule: current ? schedules[current.scheduleId] : null, assignments, schedules, workplaces };
   }, [orgId, user.uid]);
   const platform = detectPlatform();
+  const todayInfo = useAsync(() => callApi<TodayData>('me.today'), []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -76,6 +79,7 @@ export default function Profile() {
           <p className="text-sm text-slate-600">No workplace assigned.</p>
         )}
       </Card>
+      {todayInfo.data && <PhoneRegistrationCard device={todayInfo.data.device} onChanged={todayInfo.reload} />}
       <Card title="Install the app">
         {platform === 'ios' && <p className="text-sm text-slate-700">In Safari, tap the Share button, then “Add to Home Screen”.</p>}
         {platform === 'android' && <p className="text-sm text-slate-700">In Chrome, open the ⋮ menu and tap “Install app” or “Add to Home screen”.</p>}

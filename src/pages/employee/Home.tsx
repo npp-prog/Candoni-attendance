@@ -11,12 +11,15 @@ import { attendanceStatus, callApi, clockAttendance, type ClockReceipt, type Clo
 import { fmtMeters, fmtPunch, fmtTime } from '../../lib/format';
 import { detectPlatform, GEO_HELP, GeoError, geolocationSupport, getFreshPosition, permissionState, type GeoErrorKind, type Reading } from '../../lib/geolocation';
 import { clearPending, loadPending, newRequestId, savePending, type PendingRequest } from '../../lib/pending';
+import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
+import { getDeviceHint, isFresh, passkeyErrorMessage, prepareVerification, verifyThisPhone, type Prepared } from '../../lib/device';
+import { PhoneRegistrationCard } from '../../components/PhoneRegistration';
 
 type Phase =
   | { k: 'idle' }
   | { k: 'explain'; action: AttendanceAction }
   | { k: 'locating'; action: AttendanceAction; requestId: string }
-  | { k: 'review'; action: AttendanceAction; requestId: string; reading: Reading }
+  | { k: 'review'; action: AttendanceAction; requestId: string; reading: Reading; deviceError?: string }
   | { k: 'submitting'; action: AttendanceAction; requestId: string }
   | { k: 'uncertain'; pending: PendingRequest; checking: boolean; note?: string }
   | { k: 'receipt'; receipt: ClockReceipt }
@@ -99,10 +102,18 @@ export default function Home() {
   }, [data]);
   const exemption = data?.fieldwork.find((f) => f.mode === 'exemption');
 
+  // Registered-phone challenge, fetched before the Submit tap so the phone's
+  // fingerprint/face prompt can start directly from that tap (needed on iOS).
+  const [prepared, setPrepared] = useState<Prepared<PublicKeyCredentialRequestOptionsJSON> | null>(null);
+  const deviceRequired = !!data?.device.required;
+
   async function locate(action: AttendanceAction, requestId: string) {
     setPhase({ k: 'locating', action, requestId });
     try {
-      const reading = await getFreshPosition(20_000);
+      const [reading] = await Promise.all([
+        getFreshPosition(20_000),
+        deviceRequired ? prepareVerification().then(setPrepared, () => setPrepared(null)) : Promise.resolve(),
+      ]);
       setPhase({ k: 'review', action, requestId, reading });
     } catch (e) {
       setPhase({ k: 'geoerror', action, kind: e instanceof GeoError ? e.kind : 'unavailable', requestId });
@@ -120,11 +131,28 @@ export default function Home() {
   }
 
   async function submit(action: AttendanceAction, requestId: string, reading: Reading) {
+    let deviceAssertion: unknown;
+    if (deviceRequired) {
+      if (!prepared || !isFresh(prepared)) {
+        setPrepared(null);
+        prepareVerification().then(setPrepared, () => undefined);
+        return setPhase({ k: 'review', action, requestId, reading, deviceError: 'Phone check expired. Tap Submit again.' });
+      }
+      try {
+        // Started directly from the tap: shows the phone's fingerprint/face/PIN prompt.
+        deviceAssertion = await verifyThisPhone(prepared);
+      } catch (e) {
+        setPrepared(null);
+        prepareVerification().then(setPrepared, () => undefined);
+        return setPhase({ k: 'review', action, requestId, reading, deviceError: passkeyErrorMessage(e) });
+      }
+      setPrepared(null); // single use
+    }
     const pending: PendingRequest = { requestId, action, startedAt: Date.now() };
     savePending(user.uid, pending);
     setPhase({ k: 'submitting', action, requestId });
     try {
-      const res = await clockAttendance({ requestId, action, location: { ...reading, sentAt: Date.now() } });
+      const res = await clockAttendance({ requestId, action, location: { ...reading, sentAt: Date.now() }, deviceHint: getDeviceHint(), deviceAssertion });
       clearPending(user.uid);
       if (res.ok) setPhase({ k: 'receipt', receipt: res });
       else setPhase({ k: 'rejected', action, rejection: res });
@@ -146,7 +174,8 @@ export default function Home() {
   const plan = data?.plan;
   const seq = plan ? actionSequence(plan.unscheduled ? 'single' : plan.pattern) : [];
   const busy = ['locating', 'submitting', 'explain', 'review'].includes(phase.k);
-  const canAct = online && !!next?.action && next.code === 'OK' && phase.k !== 'uncertain';
+  const phoneBlocked = !!data && data.device.required && data.device.status !== 'active';
+  const canAct = online && !!next?.action && next.code === 'OK' && phase.k !== 'uncertain' && !phoneBlocked;
 
   return (
     <div className="flex flex-col gap-4">
@@ -214,12 +243,14 @@ export default function Home() {
               {next.action ? ACTION_LABELS[next.action] : 'No action available'}
             </Button>
             <p id="action-reason" className="text-center text-sm text-slate-700">
-              {next.code === 'OK' && 'Your location is checked only when you tap the button.'}
+              {phoneBlocked && (data.device.status === 'pending' ? 'Your registered phone is waiting for HR approval.' : 'Register this phone below before clocking in.')}
+              {!phoneBlocked && next.code === 'OK' && (deviceRequired ? 'You will confirm with your phone’s fingerprint, face or PIN. Location is checked only when you tap.' : 'Your location is checked only when you tap the button.')}
               {next.code !== 'OK' && next.message}
               {next.availableAt && next.code !== 'OK' && <> Available at {fmtTime(next.availableAt, tz)}.</>}
             </p>
           </div>
 
+          {phoneBlocked && <PhoneRegistrationCard device={data.device} onChanged={load} compact />}
           <LocationCard data={data} exemption={!!exemption} />
         </>
       )}
@@ -370,7 +401,7 @@ function PhaseModal({ phase, tz, data, targets, exemption, onClose, onLocate, on
         </Modal>
       );
     case 'review': {
-      const { reading, action, requestId } = phase;
+      const { reading, action, requestId, deviceError } = phase;
       const limits = data?.limits ?? { maxAccuracyMeters: 100, maxLocationAgeSeconds: 60 };
       const age = Math.max(0, Math.round((Date.now() - reading.capturedAt) / 1000));
       const stale = age > limits.maxLocationAgeSeconds - 5;
@@ -418,8 +449,10 @@ function PhaseModal({ phase, tz, data, targets, exemption, onClose, onLocate, on
               </Alert>
             )}
             <Button variant="teal" className="min-h-14 text-lg" disabled={!ok} onClick={() => onSubmit(action, requestId, reading)}>
-              Submit {ACTION_LABELS[action]}
+              {data?.device.required ? `Confirm & submit ${ACTION_LABELS[action]}` : `Submit ${ACTION_LABELS[action]}`}
             </Button>
+            {data?.device.required && <p className="text-xs text-slate-600">Your phone will ask for its fingerprint, face or PIN.</p>}
+            {deviceError && <Alert tone="warning">{deviceError}</Alert>}
             <Button variant="secondary" onClick={() => onRetryFresh(action)}>
               Retry location
             </Button>
@@ -486,6 +519,7 @@ function PhaseModal({ phase, tz, data, targets, exemption, onClose, onLocate, on
               <dd className="break-all font-mono text-xs">{r.eventId.split('_').pop()}</dd>
             </dl>
             {r.replayed && <Alert tone="info">This request had already been recorded; showing the original receipt.</Alert>}
+            {r.deviceVerified && <p className="text-sm text-emerald-800">✓ Confirmed on your registered phone</p>}
             <p className="text-xs text-slate-600">Official server time, shown in {tz}.</p>
             <Button onClick={onClose}>Done</Button>
           </div>

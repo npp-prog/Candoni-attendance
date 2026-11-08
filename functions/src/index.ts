@@ -23,7 +23,7 @@ export const clockAttendance = onCall({ enforceAppCheck, memory: '256MiB', timeo
 export const attendanceStatus = onCall({ enforceAppCheck, memory: '256MiB' }, (req) => attendanceRequestStatus(req.auth?.uid, req.data));
 
 /** Dispatcher for self-service, review, administration and reporting operations. */
-export const api = onCall({ enforceAppCheck, memory: '512MiB', timeoutSeconds: 120 }, (req) => handleApi(req.auth?.uid, req.data));
+export const api = onCall({ enforceAppCheck, memory: '512MiB', timeoutSeconds: 120 }, (req) => handleApi(req.auth?.uid, req.data, { origin: req.rawRequest.headers.origin }));
 
 /** Daily retention job. Deletes nothing unless retention is explicitly enabled in settings. */
 export const retentionJob = onSchedule({ schedule: 'every day 02:30', timeZone: 'Asia/Manila' }, async () => {

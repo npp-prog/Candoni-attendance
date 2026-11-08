@@ -9,6 +9,13 @@
    - **iPhone (Safari):** Share button → **Add to Home Screen**.
    - **Android (Chrome):** ⋮ menu → **Install app** / **Add to Home screen**.
 
+## Registering your phone (if your organization requires it)
+
+1. On your **own** phone, open **Profile → Registered phone** and tap **Register this phone**, then **Confirm with fingerprint, face or PIN**.
+2. Your phone needs a screen lock. The check happens on your phone; ClockUp never receives your fingerprint, face or PIN.
+3. When clocking in you'll tap **Confirm & submit** and unlock with your fingerprint, face or PIN.
+4. New phone? Register it the same way; HR must approve it before you can use it. Only one phone per employee, and a phone registered to someone else cannot be registered to you.
+
 ## Clocking in and out
 
 1. On **Today**, check your schedule and tap the large button. It only shows the next valid action (Clock In / Clock Out, or AM In / AM Out / PM In / PM Out).

@@ -38,7 +38,7 @@ export async function dailyMonitor(caller: Caller, raw: unknown, now = Date.now(
 }
 
 const reportSchema = z.object({
-  type: z.enum(['daily', 'dtr', 'department_summary', 'late_undertime', 'missing_absence', 'corrections', 'fieldwork']),
+  type: z.enum(['daily', 'dtr', 'department_summary', 'late_undertime', 'missing_absence', 'corrections', 'fieldwork', 'device_anomalies']),
   from: dateStr,
   to: dateStr,
   departmentId: z.string().max(128).nullish(),
@@ -55,6 +55,12 @@ export async function runReport(caller: Caller, raw: unknown, now = Date.now()) 
   const members = await scopedMembers(caller, { departmentId: input.departmentId ?? undefined, memberId: input.memberId ?? undefined, includeInactive: !!input.memberId });
   const base = { type: input.type, from: input.from, to: input.to, timezone: tz, generatedAt: now, generatedBy: caller.member.fullName };
 
+  if (input.type === 'device_anomalies') {
+    if (!isAttendanceAdmin(caller.member.role)) throw new HttpsError('permission-denied', 'The suspicious-activity report is available to HR and system administrators.');
+    const fromMs = zonedToUtc(input.from, 0, tz);
+    const toMs = zonedToUtc(addDays(input.to, 1), 0, tz);
+    return { ...base, rows: await deviceAnomalies(caller.orgId, members, fromMs, toMs) };
+  }
   if (input.type === 'corrections') {
     const snap = await col(caller.orgId, 'adjustments').where('workDate', '>=', input.from).where('workDate', '<=', input.to).get();
     const allowed = new Set(members.map((m) => m.uid));
@@ -191,4 +197,64 @@ export async function dayDetail(caller: Caller, raw: unknown) {
     adjustments: adjustments.docs.map(withId).sort((a, b) => a.createdAt - b.createdAt),
     requests: requests.docs.map(withId),
   };
+}
+
+const RAPID_WINDOW_MS = 15 * 60_000;
+
+/**
+ * Signals that one phone may be used for several employees. The device hint is
+ * a random per-browser value: it can be cleared, so absence of a finding is not
+ * proof, and a finding is a prompt to check, not proof of wrongdoing.
+ */
+async function deviceAnomalies(orgId: string, members: MemberDoc[], fromMs: number, toMs: number) {
+  const names = new Map(members.map((m) => [m.uid, m.fullName]));
+  const [evidence, attempts, pending] = await Promise.all([
+    col(orgId, 'attendanceLocationEvidence').where('receivedAt', '>=', fromMs).where('receivedAt', '<', toMs).select('memberId', 'deviceHint', 'receivedAt').get(),
+    col(orgId, 'attendanceAttempts').where('at', '>=', fromMs).where('at', '<', toMs).select('memberId', 'code', 'deviceHint', 'at').get(),
+    col(orgId, 'devices').where('status', '==', 'pending').get(),
+  ]);
+  const rows: Row[] = [];
+  const byHint = new Map<string, { memberId: string; at: number }[]>();
+  for (const d of evidence.docs) {
+    const hint = d.get('deviceHint') as string | null;
+    if (!hint || !names.has(d.get('memberId'))) continue;
+    if (!byHint.has(hint)) byHint.set(hint, []);
+    byHint.get(hint)!.push({ memberId: d.get('memberId'), at: d.get('receivedAt') });
+  }
+  for (const [hint, list] of byHint) {
+    const ids = [...new Set(list.map((x) => x.memberId))];
+    if (ids.length < 2) continue;
+    list.sort((a, b) => a.at - b.at);
+    rows.push({
+      kind: 'shared_phone', severity: 'high',
+      description: `One phone was used to record attendance for ${ids.length} employees.`,
+      employees: ids.map((i) => names.get(i)), device: hint.slice(0, 8), count: list.length, firstAt: list[0].at, lastAt: list[list.length - 1].at,
+    });
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].memberId !== list[i - 1].memberId && list[i].at - list[i - 1].at <= RAPID_WINDOW_MS) {
+        rows.push({
+          kind: 'rapid_multi_account', severity: 'high',
+          description: `Different employees clocked on the same phone ${Math.round((list[i].at - list[i - 1].at) / 60_000)} min apart.`,
+          employees: [names.get(list[i - 1].memberId), names.get(list[i].memberId)], device: hint.slice(0, 8), count: 2, firstAt: list[i - 1].at, lastAt: list[i].at,
+        });
+      }
+    }
+  }
+  const failures = new Map<string, number[]>();
+  for (const d of attempts.docs) {
+    if (!String(d.get('code')).startsWith('DEVICE_') || !names.has(d.get('memberId'))) continue;
+    if (!failures.has(d.get('memberId'))) failures.set(d.get('memberId'), []);
+    failures.get(d.get('memberId'))!.push(d.get('at'));
+  }
+  for (const [memberId, times] of failures) {
+    if (times.length < 3) continue;
+    times.sort((a, b) => a - b);
+    rows.push({ kind: 'repeated_device_failures', severity: 'medium', description: `${times.length} clock-in attempts failed the registered-phone check.`, employees: [names.get(memberId)], device: null, count: times.length, firstAt: times[0], lastAt: times[times.length - 1] });
+  }
+  for (const d of pending.docs) {
+    if (!names.has(d.get('memberId'))) continue;
+    rows.push({ kind: 'pending_phone', severity: 'info', description: `Phone registration awaiting approval (${d.get('label')}).`, employees: [d.get('memberName')], device: null, count: 1, firstAt: d.get('createdAt'), lastAt: d.get('createdAt') });
+  }
+  const order: Record<string, number> = { high: 0, medium: 1, info: 2 };
+  return rows.sort((a, b) => order[a.severity] - order[b.severity] || b.lastAt - a.lastAt);
 }

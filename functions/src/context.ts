@@ -31,6 +31,8 @@ export type OrgCollection =
   | 'attendanceEvents'
   | 'attendanceLocationEvidence'
   | 'attendanceAttempts'
+  | 'devices'
+  | 'webauthnChallenges'
   | 'adjustments'
   | 'correctionRequests'
   | 'fieldworkAuthorizations'
@@ -52,6 +54,7 @@ export function withDefaults(settings: Partial<OrgSettings> | undefined): OrgSet
     ...DEFAULT_SETTINGS,
     ...(settings ?? {}),
     retention: { ...DEFAULT_SETTINGS.retention, ...(settings?.retention ?? {}) },
+    deviceBinding: { ...DEFAULT_SETTINGS.deviceBinding, ...(settings?.deviceBinding ?? {}) },
   };
 }
 

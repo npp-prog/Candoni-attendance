@@ -18,6 +18,7 @@ import {
   shiftId,
   type ShiftDoc,
 } from './data';
+import { checkDevice, deviceSummary } from './device';
 
 export const clockSchema = z.object({
   requestId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
@@ -33,6 +34,10 @@ export const clockSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** Random per-browser identifier, used only to detect phones shared between accounts. */
+  deviceHint: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).optional(),
+  /** WebAuthn assertion from the registered phone (required when phone verification applies). */
+  deviceAssertion: z.record(z.unknown()).nullable().optional(),
 });
 export type ClockInput = z.infer<typeof clockSchema>;
 
@@ -49,6 +54,7 @@ export interface ClockReceipt {
   distanceMeters: number | null;
   accuracyMeters: number;
   validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption' | 'wfh_location' | 'wfh_exemption';
+  deviceVerified?: boolean;
 }
 
 export interface ClockRejection {
@@ -84,6 +90,7 @@ function receiptFromEvent(id: string, d: FirebaseFirestore.DocumentData, replaye
     distanceMeters: d.distanceMeters,
     accuracyMeters: d.accuracyMeters,
     validation: d.validation,
+    deviceVerified: d.deviceVerified ?? false,
   };
 }
 
@@ -225,6 +232,10 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
       );
     }
 
+    // Registered-phone verification (passkey with the phone's own screen lock).
+    const device = await checkDevice(caller, input.deviceAssertion);
+    if (!device.ok) throw new Rejection(device.code);
+
     const shiftRefs = [dates.yesterday, dates.today, dates.tomorrow].map((d) => col(caller.orgId, 'shiftInstances').doc(shiftId(caller.uid, d)));
 
     // The transaction serializes concurrent submissions: shift documents act as
@@ -273,6 +284,8 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         distanceMeters,
         accuracyMeters: Math.round(loc.accuracy * 10) / 10,
         locationAgeSeconds: Math.round(ageSeconds * 10) / 10,
+        deviceVerified: device.required,
+        deviceCredentialId: device.credentialId,
         unscheduled: plan.unscheduled,
       };
       tx.create(eventRef, event);
@@ -287,6 +300,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         capturedAt: loc.capturedAt,
         receivedAt: official,
         deviceSentAt: loc.sentAt ?? null,
+        deviceHint: input.deviceHint ?? null,
         deviceClockSkewSeconds: loc.sentAt != null ? Math.round((loc.sentAt - official) / 1000) : null,
         workplaceId,
         distanceMeters,
@@ -329,6 +343,7 @@ async function logAttempt(caller: Caller, input: ClockInput, e: Rejection) {
     message: e.message,
     details: e.details ?? null,
     location: input.location ?? null,
+    deviceHint: input.deviceHint ?? null,
     at: Date.now(),
   });
 }
@@ -394,6 +409,7 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
       radiusMeters: f.radiusMeters ?? null,
     })),
     wfhEnabled: caller.org.settings.wfhEnabled,
+    device: await deviceSummary(caller),
     limits: { maxAccuracyMeters: caller.org.settings.maxAccuracyMeters, maxLocationAgeSeconds: caller.org.settings.maxLocationAgeSeconds },
   };
 }

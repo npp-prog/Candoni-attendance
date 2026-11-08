@@ -58,6 +58,7 @@ export function DayDetailModal({ memberId, workDate, title, onClose, onChanged }
                         </a>
                       </p>
                     )}
+                    {e.deviceVerified && <p className="text-xs text-emerald-800">✓ Confirmed on registered phone</p>}
                     <p className="text-xs text-slate-500">Request {e.requestId}</p>
                   </li>
                 ))}

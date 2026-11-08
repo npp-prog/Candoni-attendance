@@ -31,6 +31,24 @@ You cannot review your own requests. A request can only be processed once. Rejec
 
 HR can also record an **authorized adjustment** directly from a day's detail (reason required; cannot adjust own attendance).
 
+## Registered phones (prevent clocking in for a coworker)
+
+**Settings → Registered phones** controls whether employees must clock in from their own registered phone, confirmed with the phone's fingerprint, face or PIN (a passkey):
+
+- **Off** (default) — nothing changes.
+- **Pilot** — only employees you mark on their profile (*Employees → name → Registered phones → Require a registered phone*).
+- **Required for everyone.**
+
+How it works: the employee registers their phone once (*Profile → Registered phone*). The phone keeps a private key that cannot be copied; ClockUp stores only the public key and never receives fingerprints, faces or PINs. Each clock-in asks the phone for its screen lock and sends a one-time signature.
+
+- If someone signs in to a coworker's account on **their own phone**, the clock-in is refused, because that phone isn't the account's registered phone.
+- A phone already registered to one employee **cannot be registered to another**.
+- The first phone can be approved automatically (setting). **Replacement phones always need HR approval**; they appear at the top of **Approvals**. Approving retires the old phone. Confirm in person that the new phone belongs to the employee. You cannot approve your own phone.
+- HR can **revoke** a phone (lost, stolen, shared) from the employee page; revocations are audited.
+- **Reports → Suspicious activity (shared phones)** (HR only) flags one phone used for several employees, different employees clocking on the same phone within 15 minutes, repeated failed phone checks, and pending registrations. These are prompts to check, not proof.
+
+Limits: if an absent employee hands over **both** their phone and its PIN, no app can tell. Passkeys may sync to the employee's other devices through their own Google/Apple account (shown on the phone record). Phones are registered to the app's web address — if you rename the Netlify site, phones must be registered again (and the new address must be added to `WEBAUTHN_ORIGINS` in `functions/.env.<project>`). Employees whose phone has no screen lock or a very old browser cannot register; turn the requirement off for them (pilot mode) or ask them to set a screen lock.
+
 ## Employees
 
 Search, filter by department and status, paginate. On an employee page:

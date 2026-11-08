@@ -11,6 +11,7 @@ import { db } from '../../firebase';
 import { callApi } from '../../lib/api';
 import { useCollection, useScopedMembers, type MemberRow } from '../../lib/hooks';
 import { EmployeeForm } from './EmployeeForm';
+import { MemberDevicesCard } from './Devices';
 
 export default function EmployeeDetail() {
   const { uid = '' } = useParams();
@@ -78,6 +79,7 @@ export default function EmployeeDetail() {
       </Card>
 
       {admin && <Assignments memberId={m.uid} schedules={schedules ?? []} canManage={canManage} tz={tz} onToast={setToast} />}
+      {admin && <MemberDevicesCard m={m} onToast={setToast} />}
       {canManage && <StatusCard m={m} onToast={setToast} />}
       {isSysAdmin(me.role) && m.uid !== me.uid && <RoleCard m={m} onToast={setToast} />}
 

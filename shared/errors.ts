@@ -22,6 +22,10 @@ export type RejectionCode =
   | 'SHIFT_COMPLETE'
   | 'NOT_SCHEDULED'
   | 'TOO_SOON'
+  | 'DEVICE_NOT_REGISTERED'
+  | 'DEVICE_PENDING_APPROVAL'
+  | 'DEVICE_VERIFICATION_REQUIRED'
+  | 'DEVICE_VERIFICATION_FAILED'
   | 'REQUEST_ID_REUSED'
   | 'CONFLICT';
 
@@ -45,6 +49,10 @@ export const REJECTION_MESSAGES: Record<RejectionCode, string> = {
   SHIFT_COMPLETE: 'All attendance actions for this shift are already recorded.',
   NOT_SCHEDULED: 'Attendance is not expected today.',
   TOO_SOON: 'Your previous action was just recorded. Please wait a moment.',
+  DEVICE_NOT_REGISTERED: 'Your organization requires a registered phone. Register this phone first (Profile → Registered phone).',
+  DEVICE_PENDING_APPROVAL: 'Your phone registration is waiting for HR approval.',
+  DEVICE_VERIFICATION_REQUIRED: 'Confirm with your phone’s fingerprint, face or PIN to clock in.',
+  DEVICE_VERIFICATION_FAILED: 'This phone could not be verified as your registered phone. Use your own registered phone, or ask HR to approve a new one.',
   REQUEST_ID_REUSED: 'This request ID was already used for a different action. Refresh and try again.',
   CONFLICT: 'Another attendance submission was processed at the same time. Refresh and check your status.',
 };

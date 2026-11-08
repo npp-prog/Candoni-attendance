@@ -10,10 +10,10 @@ All runs below were executed in this repository's development container against 
 | Type check (functions) | `npm --prefix functions run typecheck` | ✅ pass, 0 errors |
 | Lint | `npm run lint` | ✅ pass, 0 errors, 0 warnings |
 | Unit tests (shared engine, CSV) | `npm test` | ✅ 46 / 46 passed |
-| Backend integration tests (Auth + Firestore emulators) | `npm run test:functions` | ✅ 38 / 38 passed |
-| Firestore security-rules tests | `npm run test:rules` | ✅ 8 / 8 passed (≈40 assertions) |
+| Backend integration tests (Auth + Firestore emulators) | `npm run test:functions` | ✅ 45 / 45 passed (incl. real passkey crypto via a software authenticator) |
+| Firestore security-rules tests | `npm run test:rules` | ✅ 9 / 9 passed |
 | Production build | `npm run build` | ✅ built; main JS ≈83 kB gzip, Firebase SDK chunk ≈171 kB gzip |
-| End-to-end smoke test (Playwright Chromium, phone viewport, emulated geolocation, Auth/Firestore/Functions emulators, Vite dev server) | `npm run test:e2e` | ✅ 19 / 19 checks passed (incl. work-from-home flow) |
+| End-to-end smoke test (Playwright Chromium, phone viewport, emulated geolocation, Auth/Firestore/Functions emulators, Vite dev server) | `npm run test:e2e` | ✅ 26 / 26 checks passed (incl. work-from-home and registered-phone flows with Chromium virtual authenticators) |
 
 ### What the automated tests cover
 
@@ -73,6 +73,7 @@ Run on at least one **Android phone with Chrome** and one **iPhone with Safari**
 | 16 | Overnight shift: clock in before midnight, clock out after → one record on the start date | ☐ | ☐ |
 | 17 | Correction request submitted, approved by supervisor, shown as "Corrected" in history and reports | ☐ | ☐ |
 | 18 | Fieldwork request approved; clock in at the alternate site works only within the window | ☐ | ☐ |
+| 18c | Registered phone: register own phone; clock in with fingerprint/face; sign in on a coworker's phone → refused; replacement phone needs HR approval | ☐ | ☐ |
 | 18b | Work-from-home request pinned at home, approved; clock in at home accepted as “Work from home”, rejected elsewhere | ☐ | ☐ |
 | 19 | Deactivate an employee while they are signed in → next action and data access are blocked | ☐ | ☐ |
 | 20 | Admin console usable on phone (tables become cards; navigation scrolls) | ☐ | ☐ |

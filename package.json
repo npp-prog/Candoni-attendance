@@ -24,6 +24,7 @@
     "emulators:resume": "npm --prefix functions run build && firebase emulators:start --project demo-candoni --import=.emulator-data --export-on-exit=.emulator-data"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
     "firebase": "^12.19.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

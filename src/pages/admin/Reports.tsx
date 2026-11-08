@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { canViewDepartment } from '../../../shared/roles';
+import { canViewDepartment, isAttendanceAdmin } from '../../../shared/roles';
 import { addDays, localDate, monthRange } from '../../../shared/time';
 import { ACTION_LABELS, STATUS_LABELS, type AttendanceAction, type DayStatus } from '../../../shared/types';
 import { BrandMark } from '../../components/Brand';
@@ -13,7 +13,7 @@ import { useScopedMembers } from '../../lib/hooks';
 import type { MonitorRow } from './Dashboard';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-type ReportType = 'daily' | 'dtr' | 'department_summary' | 'late_undertime' | 'missing_absence' | 'corrections' | 'fieldwork';
+type ReportType = 'daily' | 'dtr' | 'department_summary' | 'late_undertime' | 'missing_absence' | 'corrections' | 'fieldwork' | 'device_anomalies';
 const TYPES: Record<ReportType, string> = {
   daily: 'Daily attendance',
   dtr: 'Individual monthly time record (DTR-style)',
@@ -22,6 +22,7 @@ const TYPES: Record<ReportType, string> = {
   missing_absence: 'Missing attendance and absences',
   corrections: 'Approved correction history',
   fieldwork: 'Fieldwork & work-from-home attendance',
+  device_anomalies: 'Suspicious activity (shared phones)',
 };
 type Row = MonitorRow & { approvedOvertimeMinutes: number; holidayName: string | null; unscheduled: boolean };
 
@@ -64,7 +65,7 @@ export default function Reports() {
           <Field label="Report">
             {(id) => (
               <Select id={id} value={type} onChange={(e) => { setType(e.target.value as ReportType); setResult(null); }}>
-                {(Object.keys(TYPES) as ReportType[]).map((t) => (
+                {(Object.keys(TYPES) as ReportType[]).filter((t) => t !== 'device_anomalies' || isAttendanceAdmin(member.role)).map((t) => (
                   <option key={t} value={t}>
                     {TYPES[t]}
                   </option>
@@ -208,6 +209,30 @@ function ReportView({ result, tz, departments, orgName }: { result: any; tz: str
             formatMinutes(r.overtimeCandidateMinutes),
             formatMinutes(r.approvedOvertimeMinutes),
             r.correctedDays,
+          ])}
+        />
+        <Pager {...paged} />
+      </Card>
+    );
+  }
+  if (t === 'device_anomalies') {
+    const SEV: Record<string, ['danger' | 'warning' | 'info', string]> = { high: ['danger', 'High'], medium: ['warning', 'Medium'], info: ['info', 'Info'] };
+    return (
+      <Card>
+        {header}
+        <p className="mt-2 text-sm text-slate-600">
+          Signals to follow up, not proof. “Same phone” uses a random identifier stored in the browser, which can be cleared. Check with the employees and their supervisor before acting.
+        </p>
+        <ResponsiveTable
+          head={['Severity', 'Finding', 'Employees', 'Phone ID', 'Count', 'First', 'Last']}
+          rows={paged.slice.map((r) => [
+            <Badge key="s" tone={SEV[r.severity]?.[0] ?? 'info'}>{SEV[r.severity]?.[1] ?? r.severity}</Badge>,
+            r.description,
+            (r.employees ?? []).join(', '),
+            r.device ?? '—',
+            r.count,
+            fmtDateTime(r.firstAt, tz),
+            fmtDateTime(r.lastAt, tz),
           ])}
         />
         <Pager {...paged} />
@@ -420,6 +445,8 @@ function exportCsv(result: any, tz: string, departments: Record<string, string>,
         rows.map((r) => [t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`, r.expectedDays, r.presentDays, r.absentDays, r.incompleteDays, r.leaveDays, r.fieldworkDays, r.wfhDays ?? 0, r.lateCount, r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.approvedOvertimeMinutes, r.correctedDays]),
       ),
     );
+  } else if (t === 'device_anomalies') {
+    downloadCsv(fname, toCsv(['Severity', 'Kind', 'Finding', 'Employees', 'Phone ID', 'Count', 'First', 'Last'], rows.map((r) => [r.severity, r.kind, r.description, (r.employees ?? []).join('; '), r.device ?? '', r.count, fmtDateTime(r.firstAt, tz), fmtDateTime(r.lastAt, tz)])));
   } else if (t === 'corrections') {
     downloadCsv(
       fname,

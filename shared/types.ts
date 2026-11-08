@@ -114,6 +114,30 @@ export interface MemberDoc {
   workplaceIds: string[];
   active: boolean;
   privacyAcceptedVersion: number | null;
+  /** Pilot flag: require a registered phone when deviceBinding.mode is 'selected'. */
+  deviceBindingRequired?: boolean;
+}
+
+export type DeviceBindingMode = 'off' | 'selected' | 'all';
+export type DeviceStatus = 'pending' | 'active' | 'revoked' | 'replaced' | 'superseded';
+
+/** A phone registered to one employee via a WebAuthn passkey (public key only). */
+export interface DeviceDoc {
+  id: string;
+  memberId: string;
+  memberName: string;
+  departmentId: string;
+  credentialId: string;
+  label: string;
+  status: DeviceStatus;
+  /** Passkey may sync to the employee's other devices via their Google/Apple account. */
+  backedUp: boolean;
+  createdAt: number;
+  approvedBy: string | null;
+  approvedByName: string | null;
+  approvedAt: number | null;
+  lastUsedAt: number | null;
+  revokedReason?: string | null;
 }
 
 export interface OrgSettings {
@@ -134,6 +158,12 @@ export interface OrgSettings {
   approvalMode: 'supervisor_or_hr' | 'hr_only';
   privacyNoticeVersion: number;
   privacyNoticeText: string;
+  /**
+   * Registered-phone verification: 'off', 'selected' (only employees flagged by HR,
+   * for piloting) or 'all'. Clock-ins then require the employee's registered phone
+   * and its screen lock (fingerprint/face/PIN) via a passkey.
+   */
+  deviceBinding: { mode: DeviceBindingMode; autoApproveFirstDevice: boolean };
   retention: {
     /** Destructive deletion stays disabled unless explicitly enabled. */
     enabled: boolean;

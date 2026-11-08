@@ -201,6 +201,86 @@ try {
     await ctx.close();
   }
 
+  // 4c. Registered phone (passkey) — Chromium virtual authenticators stand in for phones.
+  //     WebAuthn needs a domain origin, so this part uses http://localhost.
+  {
+    const LBASE = BASE.replace('127.0.0.1', 'localhost');
+    const phoneCtx = async (geo) => {
+      const ctx = await browser.newContext({ ...phone, geolocation: geo, permissions: ['geolocation'] });
+      const page = await ctx.newPage();
+      const cdp = await ctx.newCDPSession(page);
+      await cdp.send('WebAuthn.enable');
+      await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+      return { ctx, page };
+    };
+    const loginAt = async (page, email) => {
+      await page.goto(LBASE);
+      await page.getByLabel('Work email').fill(email);
+      await page.getByLabel('Password').fill(PASS);
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      await page.getByText('Good day,').waitFor({ timeout: 30000 });
+    };
+
+    // HR turns on the requirement for Erin (pilot mode is enabled in the DEV seed).
+    const hctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const hp = await hctx.newPage();
+    await login(hp, 'hr@candoni.dev');
+    await hp.getByText('Good day,').waitFor({ timeout: 20000 });
+    await hp.goto(`${BASE}/admin/employees`);
+    await hp.getByRole('link', { name: /Pia Ramos/ }).click();
+    await hp.getByLabel('Require a registered phone for this employee (pilot)').check();
+    await hp.getByText('Registered phone now required for this employee.').waitFor({ timeout: 20000 });
+    check('HR requires a registered phone for an employee', true);
+
+    // Pia's own phone: blocked until registered, then registers and clocks with fingerprint.
+    const own = await phoneCtx({ latitude: 14.5896, longitude: 120.9811, accuracy: 15 });
+    await loginAt(own.page, 'phone@candoni.dev');
+    await own.page.getByText('Register this phone below before clocking in.').waitFor({ timeout: 20000 });
+    check('Clock-in is blocked until a phone is registered', true);
+    await own.page.getByRole('button', { name: 'Register this phone' }).click();
+    await own.page.getByRole('button', { name: 'Confirm with fingerprint, face or PIN' }).click();
+    await own.page.getByText('This phone is now your registered attendance phone.').waitFor({ timeout: 20000 });
+    await own.page.screenshot({ path: `${SHOTS}/17-phone-registered.png` });
+    check('Employee registers their phone with a passkey (first phone auto-approved)', true);
+    await own.page.reload();
+    const act = own.page.getByRole('button', { name: /^(Clock In|Clock Out)$/ });
+    await act.waitFor({ timeout: 20000 });
+    await act.click();
+    await own.page.getByRole('button', { name: /^Confirm & submit/ }).click();
+    await own.page.getByRole('dialog', { name: 'Attendance recorded' }).waitFor({ timeout: 30000 });
+    check('Clocking from the registered phone succeeds and is marked as confirmed', /Confirmed on your registered phone/.test(await own.page.getByRole('dialog').innerText()));
+    await own.page.screenshot({ path: `${SHOTS}/18-phone-verified-receipt.png` });
+
+    // A coworker's phone signed in to Pia's account cannot clock for her.
+    const other = await phoneCtx({ latitude: 14.5896, longitude: 120.9811, accuracy: 15 });
+    await loginAt(other.page, 'phone@candoni.dev');
+    await other.page.waitForTimeout(61000); // let the minimum interval since the last action pass
+    await other.ctx.setGeolocation({ latitude: 14.5896, longitude: 120.9811, accuracy: 15 }); // fresh emulated fix
+    await other.page.reload();
+    const act2 = other.page.getByRole('button', { name: /^(Clock In|Clock Out)$/ });
+    await act2.waitFor({ timeout: 20000 });
+    await act2.click();
+    globalThis.__debugPage = other.page;
+    await other.page.getByRole('button', { name: /^Confirm & submit/ }).click();
+    await other.page.getByText(/Only the phone registered to this account|could not be verified/).waitFor({ timeout: 30000 });
+    check('A coworker’s phone signed in to the account cannot clock in', true);
+    await other.page.screenshot({ path: `${SHOTS}/19-other-phone-blocked.png` });
+    // Registering the coworker's phone to Pia needs HR approval.
+    await other.page.getByRole('button', { name: 'Cancel' }).click();
+    await other.page.goto(`${LBASE}/profile`);
+    await other.page.getByRole('button', { name: 'Replace with this phone (needs HR approval)' }).click();
+    await other.page.getByRole('button', { name: 'Confirm with fingerprint, face or PIN' }).click();
+    await other.page.getByText('HR must approve this phone').waitFor({ timeout: 20000 });
+    check('Registering a different phone requires HR approval', true);
+    await hp.goto(`${BASE}/admin/requests`);
+    await hp.getByText(/Phone registrations awaiting approval \(1\)/).waitFor({ timeout: 20000 });
+    await hp.screenshot({ path: `${SHOTS}/20-phone-approval-queue.png` });
+    check('HR sees the phone in the approval queue', true);
+    await own.ctx.close();
+    await other.ctx.close();
+    await hctx.close();
+  }
+
   // 5. HR: reports + audit log; inactive account blocked
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -225,6 +305,7 @@ try {
     await ctx2.close();
   }
 } catch (e) {
+  if (globalThis.__debugPage) await globalThis.__debugPage.screenshot({ path: `${SHOTS}/zz-failure.png` }).catch(() => undefined);
   check('Unexpected error', false, e.message.split('\n')[0]);
 } finally {
   await browser.close();

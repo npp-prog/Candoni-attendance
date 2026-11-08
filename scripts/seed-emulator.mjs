@@ -40,8 +40,8 @@ async function upsertUser(email, uid) {
 }
 
 async function main() {
-  await org.set({ name: 'Candoni Demo Organization (DEV)', shortName: 'Candoni', logoUrl: null, settings: { timezone: 'Asia/Manila', maxAccuracyMeters: 100, maxLocationAgeSeconds: 60, minActionIntervalSeconds: 60, allowUnscheduledAttendance: true, unscheduledMaxHours: 16, approvalMode: 'supervisor_or_hr', privacyNoticeVersion: 1 }, seededForDevelopment: true });
-  await db.collection('branding').doc(ORG).set({ name: 'Candoni Demo Organization (DEV)', shortName: 'Candoni', logoUrl: null });
+  await org.set({ name: 'ClockUp Demo Organization (DEV)', shortName: 'ClockUp', logoUrl: null, settings: { timezone: 'Asia/Manila', maxAccuracyMeters: 100, maxLocationAgeSeconds: 60, minActionIntervalSeconds: 60, allowUnscheduledAttendance: true, unscheduledMaxHours: 16, approvalMode: 'supervisor_or_hr', privacyNoticeVersion: 1, deviceBinding: { mode: 'selected', autoApproveFirstDevice: true } }, seededForDevelopment: true });
+  await db.collection('branding').doc(ORG).set({ name: 'ClockUp Demo Organization (DEV)', shortName: 'ClockUp', logoUrl: null });
 
   const departments = { fin: ['Finance Office', 'FIN'], ops: ['Operations', 'OPS'], hr: ['Human Resources', 'HRD'] };
   for (const [id, [name, code]] of Object.entries(departments)) await org.collection('departments').doc(id).set({ name, code, active: true, orgId: ORG });
@@ -75,6 +75,7 @@ async function main() {
     ['dev-night', 'night@candoni.dev', 'Nina Garcia (DEV Night)', 'employee', 'ops', 'night', [], 1],
     ['dev-flex', 'flex@candoni.dev', 'Felix Dizon (DEV Flexible)', 'employee', 'ops', 'flex', [], 1],
     ['dev-inactive', 'inactive@candoni.dev', 'Ivan Lim (DEV Inactive)', 'employee', 'fin', 'regular', [], 1],
+    ['dev-phone', 'phone@candoni.dev', 'Pia Ramos (DEV Phone test)', 'employee', 'fin', 'always', [], 1],
   ];
   let n = 1;
   for (const [uid, email, fullName, role, dept, schedule, supervised, privacy] of people) {

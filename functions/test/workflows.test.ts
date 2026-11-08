@@ -170,24 +170,25 @@ describe('reports and monitoring scope', () => {
 
 describe('work from home', () => {
   it('lets an employee clock in only at the approved home location, labelled as WFH', async () => {
+    // Uses emp3 (Operations): other tests give emp2 a same-day fieldwork exemption.
     const d = localDate(Date.now(), TZ);
     const home = { lat: BASE.lat + 0.3, lng: BASE.lng + 0.3 }; // ~46 km from the office
-    const { id } = (await api('emp2', 'request.submit', {
+    const { id } = (await api('emp3', 'request.submit', {
       type: 'wfh', workDate: d, explanation: 'Working from home on the audit report.',
       fieldwork: { startAt: `${d}T00:00`, endAt: `${d}T23:59`, mode: 'alternate_location', purpose: 'Audit report', locationName: 'Home', lat: home.lat, lng: home.lng, radiusMeters: 150 },
     })) as { id: string };
-    await expect(api('emp2', 'request.review', { id, decision: 'approve' })).rejects.toMatchObject({ code: 'permission-denied' });
-    const res = (await api('sup1', 'request.review', { id, decision: 'approve', remarks: 'OK' })) as { fieldworkAuthorizationId: string };
+    await expect(api('emp3', 'request.review', { id, decision: 'approve' })).rejects.toMatchObject({ code: 'permission-denied' });
+    const res = (await api('sup2', 'request.review', { id, decision: 'approve', remarks: 'OK' })) as { fieldworkAuthorizationId: string };
     const auth = await col(f.orgId, 'fieldworkAuthorizations').doc(res.fieldworkAuthorizationId).get();
     expect(auth.get('category')).toBe('wfh');
 
     // Clear any punches emp2 may already have today so the next action is a clock-in.
-    await col(f.orgId, 'shiftInstances').doc(`${f.uid('emp2')}_${d}`).delete();
+    await col(f.orgId, 'shiftInstances').doc(`${f.uid('emp3')}_${d}`).delete();
     const now = Date.now();
-    const far = await processClock(f.uid('emp2'), { requestId: rid(), action: 'IN', location: loc({ lat: home.lat + 0.01, lng: home.lng }, now) });
+    const far = await processClock(f.uid('emp3'), { requestId: rid(), action: 'IN', location: loc({ lat: home.lat + 0.01, lng: home.lng }, now) });
     expect(far).toMatchObject({ ok: false, code: 'OUTSIDE_GEOFENCE' });
     await clearRateLimits(f.orgId);
-    const r = await processClock(f.uid('emp2'), { requestId: rid(), action: 'IN', location: loc(home, now) });
+    const r = await processClock(f.uid('emp3'), { requestId: rid(), action: 'IN', location: loc(home, now) });
     if (r.ok) {
       expect(r.validation).toBe('wfh_location');
       expect(r.workplaceName).toMatch(/Work from home/);

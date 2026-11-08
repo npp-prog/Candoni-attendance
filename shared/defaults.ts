@@ -6,6 +6,8 @@ What is collected: latitude, longitude, the accuracy reported by your device, an
 
 What is NOT collected: there is no continuous or background tracking, no photos, no biometrics, and no device fingerprinting.
 
+Registered phone: if your organization requires it, your phone is registered with a passkey. When you clock in, your phone asks for its own screen lock (fingerprint, face or PIN). That check happens only on your phone; ClockUp never receives your fingerprint, face or PIN, only a cryptographic confirmation from the registered phone. A random identifier stored in this browser is also recorded with attendance actions to detect phones shared between accounts.
+
 Who can see it: precise coordinates are visible only to you and to authorized HR/attendance administrators. Supervisors and standard reports see the workplace name and distance, not exact coordinates.
 
 Retention: location evidence is kept according to the organization's retention policy.
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   allowUnscheduledAttendance: true,
   unscheduledMaxHours: 16,
   wfhEnabled: true,
+  deviceBinding: { mode: 'off', autoApproveFirstDevice: true },
   approvalMode: 'supervisor_or_hr',
   privacyNoticeVersion: 1,
   privacyNoticeText: DEFAULT_PRIVACY_NOTICE,

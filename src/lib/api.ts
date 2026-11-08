@@ -54,6 +54,7 @@ export interface ClockReceipt {
   distanceMeters: number | null;
   accuracyMeters: number;
   validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption' | 'wfh_location' | 'wfh_exemption';
+  deviceVerified?: boolean;
 }
 export interface ClockRejection {
   ok: false;
@@ -66,6 +67,8 @@ export async function clockAttendance(payload: {
   requestId: string;
   action: AttendanceAction;
   location: { lat: number; lng: number; accuracy: number; capturedAt: number; sentAt: number };
+  deviceHint?: string;
+  deviceAssertion?: unknown;
 }): Promise<ClockReceipt | ClockRejection> {
   try {
     const fn = httpsCallable(functions, 'clockAttendance', { timeout: 25_000 });
@@ -108,4 +111,5 @@ export interface TodayData {
   }[];
   limits: { maxAccuracyMeters: number; maxLocationAgeSeconds: number };
   wfhEnabled: boolean;
+  device: { required: boolean; mode: 'off' | 'selected' | 'all'; status: 'none' | 'pending' | 'active'; activeLabel: string | null; pendingLabel: string | null };
 }

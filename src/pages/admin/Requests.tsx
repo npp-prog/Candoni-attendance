@@ -8,6 +8,7 @@ import { db } from '../../firebase';
 import { callApi } from '../../lib/api';
 import { fmtDateShort, fmtDateTime } from '../../lib/format';
 import { RequestStatusBadge, RequestSummary } from '../employee/Requests';
+import { PendingDevicesCard } from './Devices';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export default function AdminRequests() {
@@ -49,6 +50,7 @@ export default function AdminRequests() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-navy-900">Correction, fieldwork & WFH approvals</h1>
+      {admin && org.settings.deviceBinding.mode !== 'off' && <PendingDevicesCard onToast={setToast} />}
       {org.settings.approvalMode === 'hr_only' && !admin && <Alert tone="info">Approvals are currently limited to HR. You can view requests in your departments.</Alert>}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <Field label="Status">

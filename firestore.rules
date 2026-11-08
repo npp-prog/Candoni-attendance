@@ -141,6 +141,17 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Registered phones (public keys only): the employee and HR/sysadmin.
+      match /devices/{id} {
+        allow read: if canReadSensitive(orgId, resource.data);
+        allow write: if false;
+      }
+
+      // Single-use WebAuthn challenges: server only.
+      match /webauthnChallenges/{id} {
+        allow read, write: if false;
+      }
+
       match /auditLogs/{id} {
         allow read: if isAdmin(orgId);
         allow write: if false;

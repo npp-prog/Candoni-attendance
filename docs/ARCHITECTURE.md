@@ -42,6 +42,8 @@ Everything is organization-scoped from the start: `organizations/{orgId}/...`. T
 | `…/correctionRequests/{id}` | Missing/incorrect punch, explanation, overtime, fieldwork requests with status, reviewer, remarks | Functions |
 | `…/fieldworkAuthorizations/{id}` | Approved window + alternate location geofence or explicit exemption; revocable. `category` is `fieldwork` or `wfh` (work from home: geofence at the approved home location) | Functions (review) |
 | `…/overtimeApprovals/{id}` | Approved overtime minutes, tracked separately from potential overtime | Functions (review) |
+| `…/devices/{credentialId}` | Registered phone: WebAuthn public key (COSE), sign counter, relying-party id, status (pending/active/revoked/replaced/superseded), approval, random browser hint for anomaly detection. Owner + HR read | Functions |
+| `…/webauthnChallenges/{uid_purpose}` | Single-use 2-minute challenges (server only) | Functions |
 | `…/auditLogs/{id}` | Append-only: actor, role, action, target, before/after, reason, time | Functions |
 | `…/rateLimits/{key}` | Throttle windows (no client access) | Functions |
 
@@ -95,10 +97,14 @@ All calculations are pure functions in `shared/attendance.ts` and `shared/schedu
 
 Additional guards: nobody may review or adjust their own attendance; HR cannot modify their own assignments or other administrators; the last active system administrator cannot be demoted or deactivated; role changes are sysadmin-only and audited.
 
+## Registered-phone verification (anti-proxy)
+
+Optional (`settings.deviceBinding.mode`: `off` / `selected` / `all`). Uses WebAuthn passkeys via `@simplewebauthn`: platform authenticator, `userVerification: required`, `attestation: none`, ES256/RS256. The relying-party id is the hostname of the request origin, which must be in `WEBAUTHN_ORIGINS`. Clock-in step 1 (`device.authOptions`) issues a single-use challenge for the employee's active credential; step 2 (`clockAttendance.deviceAssertion`) is verified after the geofence check and before the attendance transaction (challenge consumed atomically; counter updated). One active phone per employee; registration is refused when the browser hint already belongs to another employee's active/pending phone; replacements require HR (not self) approval. The browser hint is a random `localStorage` value used only for anomaly detection (`device_anomalies` report), never as identity proof. Rejections: `DEVICE_NOT_REGISTERED`, `DEVICE_PENDING_APPROVAL`, `DEVICE_VERIFICATION_REQUIRED`, `DEVICE_VERIFICATION_FAILED`.
+
 ## Security model and limitations
 
 - **Location is evidence, not proof.** Browser geolocation is reported by the device. It can be spoofed with developer tools, mock-location apps, or modified browsers. The server validates the *reported* reading; it cannot verify the device was physically present. This app is **not spoof-proof** and **not equivalent to biometric verification**. IP geolocation is not used.
-- **No device fingerprinting** and no browser device ID is treated as identity. No selfies, facial recognition, or biometrics.
+- **No device fingerprinting** and no browser device ID is treated as identity. No selfies, facial recognition, or biometric data collection: the optional registered-phone check uses the phone's own screen lock locally and sends only a signature.
 - **No background tracking:** location is requested only via `getCurrentPosition` when the employee taps an action (`maximumAge: 0`, high accuracy). There is no `watchPosition`.
 - **App Check** (optional) reduces automated abuse; it does not prove identity or presence.
 - **Rate limiting** is a simple Firestore fixed window per user and operation class.

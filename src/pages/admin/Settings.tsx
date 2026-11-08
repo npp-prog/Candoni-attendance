@@ -106,6 +106,29 @@ function OrgSettingsForm() {
           Allow employees to request work from home (approved per request, clock-in only at the approved home location)
         </label>
       </Card>
+      <Card title="Registered phones (anti-proxy clock-in)">
+        <p className="text-sm text-slate-700">
+          Require employees to clock in from their own registered phone, confirmed with the phone’s fingerprint, face or PIN (passkey). Prevents clocking in for a coworker on another phone. Biometrics never leave the phone.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Requirement">
+            {(id) => (
+              <Select id={id} value={s.deviceBinding.mode} onChange={(e) => setS({ ...s, deviceBinding: { ...s.deviceBinding, mode: e.target.value as OrgSettings['deviceBinding']['mode'] } })}>
+                <option value="off">Off</option>
+                <option value="selected">Pilot: only employees marked on their profile</option>
+                <option value="all">Required for everyone</option>
+              </Select>
+            )}
+          </Field>
+        </div>
+        <label className="mt-2 flex min-h-11 items-center gap-2">
+          <input type="checkbox" className="h-5 w-5" checked={s.deviceBinding.autoApproveFirstDevice} onChange={(e) => setS({ ...s, deviceBinding: { ...s.deviceBinding, autoApproveFirstDevice: e.target.checked } })} />
+          Approve an employee’s first phone automatically (replacements always need HR approval)
+        </label>
+        <Alert tone="info" className="mt-2">
+          Phones are registered to this app’s web address. If you change the address (for example the Netlify site name), employees must register their phones again. Before requiring it for everyone, pilot with a few employees and announce it.
+        </Alert>
+      </Card>
       <Card title="Location privacy notice">
         <Textarea className="min-h-64" value={s.privacyNoticeText} onChange={(e) => setS({ ...s, privacyNoticeText: e.target.value })} aria-label="Privacy notice text" />
         <p className="mt-1 text-xs text-slate-600">Current version {org.settings.privacyNoticeVersion}. Changing the text publishes a new version that every employee must acknowledge.</p>

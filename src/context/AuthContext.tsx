@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: d.name,
           shortName: d.shortName ?? d.name,
           logoUrl: d.logoUrl ?? null,
-          settings: { ...DEFAULT_SETTINGS, ...(d.settings ?? {}), retention: { ...DEFAULT_SETTINGS.retention, ...(d.settings?.retention ?? {}) } },
+          settings: { ...DEFAULT_SETTINGS, ...(d.settings ?? {}), retention: { ...DEFAULT_SETTINGS.retention, ...(d.settings?.retention ?? {}) }, deviceBinding: { ...DEFAULT_SETTINGS.deviceBinding, ...(d.settings?.deviceBinding ?? {}) } },
         };
         setOrg(o);
         setBranding({ name: o.name, shortName: o.shortName, logoUrl: o.logoUrl });
