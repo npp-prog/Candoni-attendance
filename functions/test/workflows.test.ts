@@ -167,3 +167,43 @@ describe('reports and monitoring scope', () => {
     expect(r.rows.find((x) => x.departmentId === 'd1')?.expectedDays).toBeGreaterThan(0);
   });
 });
+
+describe('work from home', () => {
+  it('lets an employee clock in only at the approved home location, labelled as WFH', async () => {
+    const d = localDate(Date.now(), TZ);
+    const home = { lat: BASE.lat + 0.3, lng: BASE.lng + 0.3 }; // ~46 km from the office
+    const { id } = (await api('emp2', 'request.submit', {
+      type: 'wfh', workDate: d, explanation: 'Working from home on the audit report.',
+      fieldwork: { startAt: `${d}T00:00`, endAt: `${d}T23:59`, mode: 'alternate_location', purpose: 'Audit report', locationName: 'Home', lat: home.lat, lng: home.lng, radiusMeters: 150 },
+    })) as { id: string };
+    await expect(api('emp2', 'request.review', { id, decision: 'approve' })).rejects.toMatchObject({ code: 'permission-denied' });
+    const res = (await api('sup1', 'request.review', { id, decision: 'approve', remarks: 'OK' })) as { fieldworkAuthorizationId: string };
+    const auth = await col(f.orgId, 'fieldworkAuthorizations').doc(res.fieldworkAuthorizationId).get();
+    expect(auth.get('category')).toBe('wfh');
+
+    // Clear any punches emp2 may already have today so the next action is a clock-in.
+    await col(f.orgId, 'shiftInstances').doc(`${f.uid('emp2')}_${d}`).delete();
+    const now = Date.now();
+    const far = await processClock(f.uid('emp2'), { requestId: rid(), action: 'IN', location: loc({ lat: home.lat + 0.01, lng: home.lng }, now) });
+    expect(far).toMatchObject({ ok: false, code: 'OUTSIDE_GEOFENCE' });
+    await clearRateLimits(f.orgId);
+    const r = await processClock(f.uid('emp2'), { requestId: rid(), action: 'IN', location: loc(home, now) });
+    if (r.ok) {
+      expect(r.validation).toBe('wfh_location');
+      expect(r.workplaceName).toMatch(/Work from home/);
+    } else {
+      // Outside today's shift window (e.g. late at night) the sequencing rules apply, not the location.
+      expect(['TOO_EARLY', 'SHIFT_CLOSED', 'SHIFT_COMPLETE', 'TOO_SOON']).toContain(r.code);
+    }
+  });
+
+  it('rejects WFH requests when the organization disables them', async () => {
+    await orgRef(f.orgId).update({ 'settings.wfhEnabled': false });
+    const d = localDate(Date.now(), TZ);
+    await expect(api('emp1', 'request.submit', {
+      type: 'wfh', workDate: d, explanation: 'Working from home today.',
+      fieldwork: { startAt: `${d}T08:00`, endAt: `${d}T17:00`, mode: 'exemption', purpose: 'Remote work' },
+    })).rejects.toMatchObject({ code: 'failed-precondition' });
+    await orgRef(f.orgId).update({ 'settings.wfhEnabled': true });
+  });
+});

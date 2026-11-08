@@ -101,6 +101,10 @@ function OrgSettingsForm() {
           <input type="checkbox" className="h-5 w-5" checked={s.allowUnscheduledAttendance} onChange={(e) => setS({ ...s, allowUnscheduledAttendance: e.target.checked })} />
           Allow attendance on rest days, holidays, or without a schedule (flagged as unscheduled)
         </label>
+        <label className="flex min-h-11 items-center gap-2">
+          <input type="checkbox" className="h-5 w-5" checked={s.wfhEnabled} onChange={(e) => setS({ ...s, wfhEnabled: e.target.checked })} />
+          Allow employees to request work from home (approved per request, clock-in only at the approved home location)
+        </label>
       </Card>
       <Card title="Location privacy notice">
         <Textarea className="min-h-64" value={s.privacyNoticeText} onChange={(e) => setS({ ...s, privacyNoticeText: e.target.value })} aria-label="Privacy notice text" />

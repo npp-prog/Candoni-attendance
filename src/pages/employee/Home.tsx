@@ -94,7 +94,7 @@ export default function Home() {
       ...data.workplaces.map((w) => ({ id: w.id, name: w.name, lat: w.lat, lng: w.lng, radiusMeters: w.radiusMeters })),
       ...data.fieldwork
         .filter((f) => f.mode === 'alternate_location' && f.lat != null && f.lng != null && f.radiusMeters)
-        .map((f) => ({ id: `fw:${f.id}`, name: f.locationName ?? 'Fieldwork location', lat: f.lat!, lng: f.lng!, radiusMeters: f.radiusMeters! })),
+        .map((f) => ({ id: `fw:${f.id}`, name: f.category === 'wfh' ? `Work from home${f.locationName ? ` (${f.locationName})` : ''}` : f.locationName ?? 'Fieldwork location', lat: f.lat!, lng: f.lng!, radiusMeters: f.radiusMeters! })),
     ];
   }, [data]);
   const exemption = data?.fieldwork.find((f) => f.mode === 'exemption');
@@ -286,7 +286,7 @@ function LocationCard({ data, exemption }: { data: TodayData; exemption: boolean
     <Card title="Location verification">
       {data.workplaces.length === 0 && data.fieldwork.length === 0 ? (
         <Alert tone="warning" title="No authorized workplace">
-          You have no workplace assigned, so attendance cannot be accepted. Contact HR or request fieldwork authorization.
+          You have no workplace assigned, so attendance cannot be accepted. Contact HR or request fieldwork or work-from-home authorization.
         </Alert>
       ) : (
         <ul className="flex flex-col gap-1 text-sm text-slate-700">
@@ -297,7 +297,7 @@ function LocationCard({ data, exemption }: { data: TodayData; exemption: boolean
           ))}
           {data.fieldwork.map((f) => (
             <li key={f.id}>
-              ⚑ Approved fieldwork: <span className="font-medium">{f.purpose}</span>
+              {f.category === 'wfh' ? '🏠 Approved work from home' : '⚑ Approved fieldwork'}: <span className="font-medium">{f.purpose}</span>
               {f.mode === 'exemption' ? ' (location exemption)' : ` at ${f.locationName}`} until {fmtTime(f.endAt, data.timezone)}
             </li>
           ))}
@@ -412,7 +412,7 @@ function PhaseModal({ phase, tz, data, targets, exemption, onClose, onLocate, on
               <Alert tone="warning" title="Outside your authorized area">
                 Move closer to your workplace and retry. If you are on official business, submit a{' '}
                 <Link className="font-semibold underline" to="/requests">
-                  fieldwork request
+                  fieldwork or work-from-home request
                 </Link>
                 .
               </Alert>

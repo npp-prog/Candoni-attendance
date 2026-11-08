@@ -154,6 +154,53 @@ try {
     await ctx.close();
   }
 
+  // 4b. Work from home: request with home pin → supervisor approves → clock at home
+  {
+    const HOME = { latitude: 14.6500, longitude: 121.0500, accuracy: 25 };
+    const ctx = await browser.newContext({ ...phone, geolocation: HOME, permissions: ['geolocation'] });
+    const page = await ctx.newPage();
+    await login(page, 'employee@candoni.dev');
+    await page.getByText('Good day,').waitFor({ timeout: 20000 });
+    await page.getByRole('link', { name: 'Requests', exact: true }).click();
+    await page.getByRole('button', { name: '+ New request' }).click();
+    await page.getByLabel('Request type').selectOption('wfh');
+    await page.getByRole('button', { name: 'Use my current location (I am at home)' }).click();
+    await page.getByLabel('Latitude').and(page.locator('[value="14.650000"]')).waitFor({ timeout: 20000 });
+    const today = await page.getByLabel('Work date (shift date)').inputValue();
+    await page.getByLabel('From').fill(`${today}T00:00`);
+    await page.getByLabel('Until').fill(`${today}T23:59`);
+    await page.getByLabel('Explanation').fill('Preparing the monthly report from home.');
+    await page.screenshot({ path: `${SHOTS}/15-wfh-request.png` });
+    await page.getByRole('button', { name: 'Submit for approval' }).click();
+    await page.getByText('Request submitted for review.').waitFor({ timeout: 20000 });
+    check('Employee submits a work-from-home request with a pinned home location', true);
+
+    const sctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const sp = await sctx.newPage();
+    await login(sp, 'supervisor@candoni.dev');
+    await sp.getByText('Good day,').waitFor({ timeout: 20000 });
+    await sp.goto(`${BASE}/admin/requests`);
+    const card = sp.getByRole('listitem').filter({ hasText: 'Preparing the monthly report from home.' });
+    await card.getByRole('button', { name: '✓ Approve' }).click();
+    await sp.getByRole('button', { name: 'Confirm approve' }).click();
+    await sp.getByText('Request approved.').waitFor({ timeout: 20000 });
+    check('Supervisor approves the work-from-home request', true);
+    await sctx.close();
+
+    await page.goto(BASE);
+    await page.getByText('Approved work from home').waitFor({ timeout: 20000 });
+    const btn = page.getByRole('button', { name: /^(Clock In|Clock Out)$/ });
+    await btn.waitFor({ timeout: 20000 });
+    await btn.click();
+    await page.getByRole('dialog', { name: /^Confirm/ }).getByText('Work from home').first().waitFor({ timeout: 20000 });
+    await page.getByRole('button', { name: /^Submit / }).click();
+    await page.getByRole('dialog', { name: 'Attendance recorded' }).waitFor({ timeout: 30000 });
+    const rec = await page.getByRole('dialog').innerText();
+    check('Clocking at the approved home location is accepted and labelled Work from home', /Work from home/.test(rec));
+    await page.screenshot({ path: `${SHOTS}/16-wfh-receipt.png` });
+    await ctx.close();
+  }
+
   // 5. HR: reports + audit log; inactive account blocked
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

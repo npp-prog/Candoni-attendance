@@ -208,6 +208,27 @@ describe('fieldwork authorization', () => {
   });
 });
 
+describe('work from home authorization', () => {
+  it('accepts at the approved home location as WFH and rejects elsewhere', async () => {
+    const home = north(40_000);
+    await col(f.orgId, 'fieldworkAuthorizations').add({
+      memberId: f.uid('emp1'), departmentId: 'd1', active: true, requestId: 'wfh1', category: 'wfh', mode: 'alternate_location', purpose: 'Remote work',
+      locationName: 'Home', lat: home.lat, lng: home.lng, radiusMeters: 100, startAt: at('2026-02-24', '06:00'), endAt: at('2026-02-24', '20:00'),
+    });
+    const now = at('2026-02-24', '08:00');
+    expect(await clock('emp1', 'IN', now, loc(north(40_500), now))).toMatchObject({ ok: false, code: 'OUTSIDE_GEOFENCE' });
+    expect(await clock('emp1', 'IN', now, loc(north(40_050), now))).toMatchObject({ ok: true, validation: 'wfh_location', workplaceName: 'Work from home (Home)' });
+  });
+  it('labels a WFH exemption distinctly from fieldwork', async () => {
+    await col(f.orgId, 'fieldworkAuthorizations').add({
+      memberId: f.uid('emp1'), departmentId: 'd1', active: true, requestId: 'wfh2', category: 'wfh', mode: 'exemption', purpose: 'Remote work',
+      startAt: at('2026-02-25', '06:00'), endAt: at('2026-02-25', '20:00'),
+    });
+    const now = at('2026-02-25', '08:00');
+    expect(await clock('emp1', 'IN', now, loc(north(9000), now))).toMatchObject({ ok: true, validation: 'wfh_exemption' });
+  });
+});
+
 describe('organization isolation', () => {
   it('does not let a member of another organization use this organization’s workplaces', async () => {
     const other = await seedOrg(`iso${Date.now().toString(36)}`);

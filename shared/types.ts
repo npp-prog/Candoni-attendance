@@ -128,6 +128,8 @@ export interface OrgSettings {
   allowUnscheduledAttendance: boolean;
   /** Maximum length of an unscheduled shift before clock-out is no longer accepted. */
   unscheduledMaxHours: number;
+  /** Whether employees may request work-from-home authorizations. */
+  wfhEnabled: boolean;
   /** Who may approve correction/fieldwork/overtime requests. */
   approvalMode: 'supervisor_or_hr' | 'hr_only';
   privacyNoticeVersion: number;
@@ -196,7 +198,8 @@ export type DayStatus =
   | 'completed'
   | 'incomplete'
   | 'absent'
-  | 'fieldwork';
+  | 'fieldwork'
+  | 'wfh';
 
 export const STATUS_LABELS: Record<DayStatus, string> = {
   rest_day: 'Rest day',
@@ -210,6 +213,7 @@ export const STATUS_LABELS: Record<DayStatus, string> = {
   incomplete: 'Incomplete',
   absent: 'Absent',
   fieldwork: 'Fieldwork',
+  wfh: 'Work from home',
 };
 
 export type ExceptionCode =
@@ -220,7 +224,8 @@ export type ExceptionCode =
   | 'UNSCHEDULED_WORK'
   | 'OVERTIME_CANDIDATE'
   | 'CORRECTED'
-  | 'FIELDWORK_NO_PUNCH';
+  | 'FIELDWORK_NO_PUNCH'
+  | 'WFH_NO_PUNCH';
 
 export interface DayComputation {
   workDate: string;
@@ -236,18 +241,24 @@ export interface DayComputation {
   exceptions: ExceptionCode[];
 }
 
-export type RequestType = 'missing_punch' | 'incorrect_punch' | 'fieldwork' | 'explanation' | 'overtime';
+export type RequestType = 'missing_punch' | 'incorrect_punch' | 'fieldwork' | 'wfh' | 'explanation' | 'overtime';
 export const REQUEST_TYPE_LABELS: Record<RequestType, string> = {
   missing_punch: 'Missing clock-in/out',
   incorrect_punch: 'Incorrect attendance',
   fieldwork: 'Official business / fieldwork',
+  wfh: 'Work from home',
   explanation: 'Exception explanation',
   overtime: 'Overtime approval',
 };
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
+/** Remote-work authorizations share one structure; `category` tells them apart. */
+export type RemoteCategory = 'fieldwork' | 'wfh';
+
 export interface FieldworkDetails {
+  /** Missing on records created before WFH existed; treat as 'fieldwork'. */
+  category?: RemoteCategory;
   /** Epoch ms window (UTC) during which the authorization applies. */
   startAt: number;
   endAt: number;

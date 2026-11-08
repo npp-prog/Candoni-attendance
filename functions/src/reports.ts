@@ -73,7 +73,7 @@ export async function runReport(caller: Caller, raw: unknown, now = Date.now()) 
     const evSnap = await col(caller.orgId, 'attendanceEvents').where('workDate', '>=', input.from).where('workDate', '<=', input.to).get();
     const events = evSnap.docs
       .map((d) => d.data())
-      .filter((e) => allowed.has(e.memberId) && String(e.validation).startsWith('fieldwork'))
+      .filter((e) => allowed.has(e.memberId) && /^(fieldwork|wfh)_/.test(String(e.validation)))
       .map((e) => ({ memberId: e.memberId, memberName: e.memberName, workDate: e.workDate, action: e.action, at: e.at, validation: e.validation, workplaceName: e.workplaceName }));
     // Exact coordinates of alternate locations are only returned to HR/sysadmin.
     const showCoords = isAttendanceAdmin(caller.member.role);
@@ -87,7 +87,7 @@ export async function runReport(caller: Caller, raw: unknown, now = Date.now()) 
     return { ...base, rows: filtered, departments: deptNames, member: input.memberId ? memberInfo(members[0], deptNames) : null };
   }
   if (input.type === 'missing_absence') {
-    return { ...base, rows: rows.filter((r) => r.status === 'absent' || r.status === 'incomplete' || r.exceptions.includes('FIELDWORK_NO_PUNCH')), departments: deptNames };
+    return { ...base, rows: rows.filter((r) => r.status === 'absent' || r.status === 'incomplete' || r.exceptions.includes('FIELDWORK_NO_PUNCH') || r.exceptions.includes('WFH_NO_PUNCH')), departments: deptNames };
   }
   if (input.type === 'late_undertime') {
     const per = aggregate(rows, (r) => r.memberId);
@@ -128,6 +128,7 @@ function counts(list: DayRow[]) {
     absentDays: list.filter((r) => r.status === 'absent').length,
     leaveDays: list.filter((r) => r.status === 'leave').length,
     fieldworkDays: list.filter((r) => r.hasFieldwork).length,
+    wfhDays: list.filter((r) => r.hasWfh).length,
     lateCount: list.filter((r) => r.lateMinutes > 0).length,
     lateMinutes: sum((r) => r.lateMinutes),
     undertimeMinutes: sum((r) => r.undertimeMinutes),

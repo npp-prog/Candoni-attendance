@@ -37,6 +37,7 @@ If the button is unavailable, the message under it explains why (for example, to
 Use **Requests → New request** for:
 - **Missing clock-in/out** or **Incorrect attendance** — give the correct date, action, time and an explanation.
 - **Official business / fieldwork** — the time window and either the site location or a location exemption.
+- **Work from home** — the dates/times and your **home location**: while at home, tap *Use my current location (I am at home)*. Once approved, you can clock in and out only within that radius during the approved period, and your records show "Work from home".
 - **Overtime approval** and **Exception explanation**.
 
 Requests take effect only after your supervisor or HR approves them. Your explanation alone does not record attendance.

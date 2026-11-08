@@ -19,6 +19,8 @@ const VALIDATION_LABEL: Record<string, string> = {
   geofence: 'Workplace geofence',
   fieldwork_location: 'Approved fieldwork location',
   fieldwork_exemption: 'Fieldwork exemption',
+  wfh_location: 'Approved work-from-home location',
+  wfh_exemption: 'Work from home (location exemption)',
 };
 
 /** Original events, adjustments (before → after) and requests for one employee-day. */

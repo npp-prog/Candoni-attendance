@@ -53,7 +53,7 @@ export interface ClockReceipt {
   workplaceId: string;
   distanceMeters: number | null;
   accuracyMeters: number;
-  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption';
+  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption' | 'wfh_location' | 'wfh_exemption';
 }
 export interface ClockRejection {
   ok: false;
@@ -96,6 +96,7 @@ export interface TodayData {
   workplaces: { id: string; name: string; address: string; lat: number; lng: number; radiusMeters: number }[];
   fieldwork: {
     id: string;
+    category: 'fieldwork' | 'wfh';
     mode: 'alternate_location' | 'exemption';
     purpose: string;
     startAt: number;
@@ -106,4 +107,5 @@ export interface TodayData {
     radiusMeters: number | null;
   }[];
   limits: { maxAccuracyMeters: number; maxLocationAgeSeconds: number };
+  wfhEnabled: boolean;
 }

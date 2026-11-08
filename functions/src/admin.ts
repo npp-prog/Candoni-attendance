@@ -370,6 +370,7 @@ const settingsSchema = z.object({
     minActionIntervalSeconds: z.number().int().min(10).max(3600),
     allowUnscheduledAttendance: z.boolean(),
     unscheduledMaxHours: z.number().int().min(1).max(24),
+    wfhEnabled: z.boolean().default(true),
     approvalMode: z.enum(['supervisor_or_hr', 'hr_only']),
     privacyNoticeVersion: z.number().int().min(1),
     privacyNoticeText: text(8000).min(20),

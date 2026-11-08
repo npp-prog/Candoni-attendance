@@ -21,7 +21,7 @@ const TYPES: Record<ReportType, string> = {
   late_undertime: 'Late and undertime summary',
   missing_absence: 'Missing attendance and absences',
   corrections: 'Approved correction history',
-  fieldwork: 'Fieldwork attendance',
+  fieldwork: 'Fieldwork & work-from-home attendance',
 };
 type Row = MonitorRow & { approvedOvertimeMinutes: number; holidayName: string | null; unscheduled: boolean };
 
@@ -240,8 +240,9 @@ function ReportView({ result, tz, departments, orgName }: { result: any; tz: str
     <Card>
       {header}
       <ResponsiveTable
-        head={['Employee', 'Purpose', 'Window', 'Rule', 'Approved by', 'Status']}
+        head={['Type', 'Employee', 'Purpose', 'Window', 'Rule', 'Approved by', 'Status']}
         rows={paged.slice.map((r) => [
+          r.category === 'wfh' ? 'Work from home' : 'Fieldwork',
           r.memberName,
           r.purpose,
           `${fmtDateTime(r.startAt, tz)} – ${fmtDateTime(r.endAt, tz)}`,
@@ -251,7 +252,7 @@ function ReportView({ result, tz, departments, orgName }: { result: any; tz: str
         ])}
       />
       <Pager {...paged} />
-      <h3 className="mt-4 font-semibold text-navy-900">Attendance recorded under fieldwork</h3>
+      <h3 className="mt-4 font-semibold text-navy-900">Attendance recorded under fieldwork or work from home</h3>
       {(result.events ?? []).length === 0 ? (
         <p className="text-sm text-slate-600">None in this period.</p>
       ) : (
@@ -368,7 +369,7 @@ function Dtr({ result, tz, orgName }: { result: any; tz: string; orgName: string
               <td className="tabular border border-slate-300 p-1">{r.undertimeMinutes || ''}</td>
               <td className="tabular border border-slate-300 p-1">{r.workedMinutes ? formatMinutes(r.workedMinutes) : ''}</td>
               <td className="border border-slate-300 p-1">
-                {[r.holidayName, ['rest_day', 'leave', 'absent', 'incomplete', 'fieldwork', 'holiday'].includes(r.status) ? STATUS_LABELS[r.status] : null, r.correctedActions.length ? 'Corrected' : null, r.unscheduled ? 'Unscheduled' : null]
+                {[r.holidayName, ['rest_day', 'leave', 'absent', 'incomplete', 'fieldwork', 'wfh', 'holiday'].includes(r.status) ? STATUS_LABELS[r.status] : null, r.correctedActions.length ? 'Corrected' : null, r.unscheduled ? 'Unscheduled' : null]
                   .filter(Boolean)
                   .join('; ')}
               </td>
@@ -415,8 +416,8 @@ function exportCsv(result: any, tz: string, departments: Record<string, string>,
     downloadCsv(
       fname,
       toCsv(
-        [t === 'department_summary' ? 'Department' : 'Employee', 'Expected days', 'Present', 'Absent', 'Incomplete', 'Leave', 'Fieldwork', 'Late count', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Approved OT min', 'Corrected days'],
-        rows.map((r) => [t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`, r.expectedDays, r.presentDays, r.absentDays, r.incompleteDays, r.leaveDays, r.fieldworkDays, r.lateCount, r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.approvedOvertimeMinutes, r.correctedDays]),
+        [t === 'department_summary' ? 'Department' : 'Employee', 'Expected days', 'Present', 'Absent', 'Incomplete', 'Leave', 'Fieldwork', 'WFH', 'Late count', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Approved OT min', 'Corrected days'],
+        rows.map((r) => [t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`, r.expectedDays, r.presentDays, r.absentDays, r.incompleteDays, r.leaveDays, r.fieldworkDays, r.wfhDays ?? 0, r.lateCount, r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.approvedOvertimeMinutes, r.correctedDays]),
       ),
     );
   } else if (t === 'corrections') {
@@ -431,8 +432,8 @@ function exportCsv(result: any, tz: string, departments: Record<string, string>,
     downloadCsv(
       fname,
       toCsv(
-        ['Employee', 'Purpose', 'Start', 'End', 'Rule', 'Site', 'Radius m', 'Approved by', 'Active'],
-        rows.map((r) => [r.memberName, r.purpose, fmtDateTime(r.startAt, tz), fmtDateTime(r.endAt, tz), r.mode, r.locationName ?? '', r.radiusMeters ?? '', r.approvedByName, r.active ? 'Yes' : 'No']),
+        ['Type', 'Employee', 'Purpose', 'Start', 'End', 'Rule', 'Site', 'Radius m', 'Approved by', 'Active'],
+        rows.map((r) => [r.category === 'wfh' ? 'Work from home' : 'Fieldwork', r.memberName, r.purpose, fmtDateTime(r.startAt, tz), fmtDateTime(r.endAt, tz), r.mode, r.locationName ?? '', r.radiusMeters ?? '', r.approvedByName, r.active ? 'Yes' : 'No']),
       ),
     );
   }

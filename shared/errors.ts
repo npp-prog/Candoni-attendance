@@ -37,7 +37,7 @@ export const REJECTION_MESSAGES: Record<RejectionCode, string> = {
   LOCATION_INACCURATE: 'Your location reading is not precise enough. Move near a window or outdoors, wait a few seconds, and retry.',
   LOCATION_STALE: 'Your location reading is too old. Please retry to capture a fresh position.',
   LOCATION_FROM_FUTURE: 'Your device clock appears to be incorrect. Enable automatic date & time and retry.',
-  NO_AUTHORIZED_WORKPLACE: 'You have no authorized workplace assigned. Contact HR or request fieldwork authorization.',
+  NO_AUTHORIZED_WORKPLACE: 'You have no authorized workplace assigned. Contact HR or request fieldwork or work-from-home authorization.',
   OUTSIDE_GEOFENCE: 'You are outside your authorized workplace area.',
   ACTION_NOT_ALLOWED: 'That attendance action is not the next valid action.',
   TOO_EARLY: 'Attendance for your shift is not open yet.',

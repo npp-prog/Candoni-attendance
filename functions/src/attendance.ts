@@ -12,6 +12,7 @@ import {
   authorizedWorkplaces,
   datesAround,
   fieldworkTargets,
+  categoryOf,
   loadScheduleContext,
   planFor,
   shiftId,
@@ -47,7 +48,7 @@ export interface ClockReceipt {
   workplaceId: string;
   distanceMeters: number | null;
   accuracyMeters: number;
-  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption';
+  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption' | 'wfh_location' | 'wfh_exemption';
 }
 
 export interface ClockRejection {
@@ -195,14 +196,20 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
     let workplaceName: string;
     let distanceMeters: number | null;
     if (match) {
-      validation = match.target.id.startsWith('fieldwork:') ? 'fieldwork_location' : 'geofence';
+      if (match.target.id.startsWith('fieldwork:')) {
+        const auth = fieldwork.find((f) => `fieldwork:${f.id}` === match.target.id);
+        validation = auth && categoryOf(auth) === 'wfh' ? 'wfh_location' : 'fieldwork_location';
+      } else {
+        validation = 'geofence';
+      }
       workplaceId = match.target.id;
       workplaceName = match.target.name;
       distanceMeters = Math.round(match.distanceMeters * 10) / 10;
     } else if (exemption) {
-      validation = 'fieldwork_exemption';
+      const wfh = categoryOf(exemption) === 'wfh';
+      validation = wfh ? 'wfh_exemption' : 'fieldwork_exemption';
       workplaceId = `fieldwork:${exemption.id}`;
-      workplaceName = `Fieldwork exemption: ${exemption.purpose}`.slice(0, 120);
+      workplaceName = `${wfh ? 'Work from home (exemption)' : 'Fieldwork exemption'}: ${exemption.purpose}`.slice(0, 120);
       distanceMeters = nearest ? Math.round(nearest.distanceMeters) : null;
     } else if (!targets.length) {
       throw new Rejection('NO_AUTHORIZED_WORKPLACE');
@@ -376,6 +383,7 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
     workplaces: workplaces.map((w) => ({ id: w.id, name: w.name, address: w.address, lat: w.lat, lng: w.lng, radiusMeters: w.radiusMeters })),
     fieldwork: fieldwork.map((f) => ({
       id: f.id,
+      category: categoryOf(f),
       mode: f.mode,
       purpose: f.purpose,
       startAt: f.startAt,
@@ -385,6 +393,7 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
       lng: f.lng ?? null,
       radiusMeters: f.radiusMeters ?? null,
     })),
+    wfhEnabled: caller.org.settings.wfhEnabled,
     limits: { maxAccuracyMeters: caller.org.settings.maxAccuracyMeters, maxLocationAgeSeconds: caller.org.settings.maxLocationAgeSeconds },
   };
 }

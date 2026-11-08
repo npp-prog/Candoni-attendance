@@ -16,6 +16,7 @@ export type MonitorRow = DayComputation & {
   departmentId: string;
   scheduleName: string | null;
   hasFieldwork: boolean;
+  hasWfh: boolean;
   onLeave: boolean;
   workplaceNames: string[];
 };
@@ -33,6 +34,7 @@ const TILES: [string, string, string][] = [
   ['completed', 'Completed', 'All actions recorded'],
   ['incomplete', 'Incomplete', 'Missing actions after cutoff'],
   ['fieldwork', 'Approved fieldwork', 'Covered by an authorization'],
+  ['wfh', 'Work from home', 'Approved work-from-home today'],
   ['absent', 'Absent', 'Only after the shift cutoff'],
 ];
 
@@ -95,7 +97,7 @@ export default function Dashboard() {
       {loading && !data && <PageLoader />}
       {data && (
         <>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
             {TILES.map(([k, label, hint]) => (
               <li key={k} className="rounded-2xl border border-slate-200 bg-white p-3" title={hint}>
                 <p className="text-xs font-medium text-slate-600">{label}</p>
@@ -136,6 +138,7 @@ export default function Dashboard() {
                             <StatusBadge status={r.status} />
                             {r.correctedActions.length > 0 && <Badge tone="info" icon="✎">Corrected</Badge>}
                             {r.hasFieldwork && <Badge tone="info" icon="⚑">Fieldwork</Badge>}
+                            {r.hasWfh && <Badge tone="info" icon="⌂">WFH</Badge>}
                           </div>
                         </td>
                       </tr>

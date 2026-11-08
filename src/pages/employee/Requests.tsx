@@ -8,6 +8,7 @@ import { db } from '../../firebase';
 import { callApi } from '../../lib/api';
 import { fmtDateShort, fmtDateTime } from '../../lib/format';
 import { getFreshPosition } from '../../lib/geolocation';
+import { mapLinks } from '../../../shared/geo';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function RequestStatusBadge({ status }: { status: string }) {
@@ -29,8 +30,17 @@ export function RequestSummary({ r, tz }: { r: any; tz: string }) {
       {r.type === 'overtime' && <p>Overtime requested: {r.minutes} min</p>}
       {r.fieldwork && (
         <p>
+          {r.type === 'wfh' || r.fieldwork.category === 'wfh' ? '🏠 ' : ''}
           {r.fieldwork.purpose} · {fmtDateTime(r.fieldwork.startAt, tz)} – {fmtDateTime(r.fieldwork.endAt, tz)} ·{' '}
           {r.fieldwork.mode === 'exemption' ? 'Location exemption' : `At ${r.fieldwork.locationName} (${r.fieldwork.radiusMeters} m)`}
+          {r.fieldwork.mode !== 'exemption' && r.fieldwork.lat != null && (
+            <>
+              {' · '}
+              <a className="underline" href={mapLinks(r.fieldwork.lat, r.fieldwork.lng).openStreetMap} target="_blank" rel="noreferrer">
+                map
+              </a>
+            </>
+          )}
         </p>
       )}
       <p className="mt-1 whitespace-pre-line">“{r.explanation}”</p>
@@ -44,7 +54,7 @@ export function RequestSummary({ r, tz }: { r: any; tz: string }) {
 }
 
 export default function Requests() {
-  const { orgId, user, tz } = useSession();
+  const { orgId, user, tz, org } = useSession();
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -75,7 +85,7 @@ export default function Requests() {
           + New request
         </Button>
       </div>
-      <p className="text-sm text-slate-600">Ask for a missing or incorrect entry to be corrected, explain an exception, request overtime approval, or request official business / fieldwork authorization. Requests take effect only after approval.</p>
+      <p className="text-sm text-slate-600">Ask for a missing or incorrect entry to be corrected, explain an exception, request overtime approval, or request official business / fieldwork or work-from-home authorization. Requests take effect only after approval.</p>
       {error && <Alert tone="danger">{error}</Alert>}
       {!items && !error && <PageLoader />}
       {items && items.length === 0 && <EmptyState title="No requests yet" />}
@@ -100,13 +110,13 @@ export default function Requests() {
         ))}
       </ul>
       <Pager {...paged} />
-      {creating && <NewRequest tz={tz} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setToast('Request submitted for review.'); }} />}
+      {creating && <NewRequest tz={tz} wfhEnabled={org.settings.wfhEnabled} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setToast('Request submitted for review.'); }} />}
       <Toast message={toast} onDone={() => setToast(null)} />
     </div>
   );
 }
 
-function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; onDone: () => void }) {
+function NewRequest({ tz, wfhEnabled, onClose, onDone }: { tz: string; wfhEnabled: boolean; onClose: () => void; onDone: () => void }) {
   const today = localDate(Date.now(), tz);
   const [type, setType] = useState<RequestType>('missing_punch');
   const [workDate, setWorkDate] = useState(today);
@@ -118,6 +128,14 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+
+  const remote = type === 'fieldwork' || type === 'wfh';
+  const isWfh = type === 'wfh';
+  function chooseType(t: RequestType) {
+    setType(t);
+    // Work from home defaults to pinning the home location rather than an exemption.
+    if (t === 'wfh') setFw((f) => ({ ...f, mode: 'alternate_location', locationName: f.locationName || 'Home', purpose: f.purpose || 'Work from home', radiusMeters: f.radiusMeters || '100' }));
+  }
 
   async function useHere() {
     setLocating(true);
@@ -139,7 +157,7 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
       let payload: Record<string, unknown> = base;
       if (type === 'missing_punch' || type === 'incorrect_punch') payload = { ...base, action, proposedAt };
       if (type === 'overtime') payload = { ...base, minutes: Number(minutes) };
-      if (type === 'fieldwork')
+      if (remote)
         payload = {
           ...base,
           fieldwork: {
@@ -165,8 +183,8 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
         {error && <Alert tone="danger">{error}</Alert>}
         <Field label="Request type">
           {(id) => (
-            <Select id={id} value={type} onChange={(e) => setType(e.target.value as RequestType)}>
-              {(Object.keys(REQUEST_TYPE_LABELS) as RequestType[]).map((t) => (
+            <Select id={id} value={type} onChange={(e) => chooseType(e.target.value as RequestType)}>
+              {(Object.keys(REQUEST_TYPE_LABELS) as RequestType[]).filter((t) => t !== 'wfh' || wfhEnabled).map((t) => (
                 <option key={t} value={t}>
                   {REQUEST_TYPE_LABELS[t]}
                 </option>
@@ -175,7 +193,7 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
           )}
         </Field>
         <Field label="Work date (shift date)" hint="For overnight shifts, use the date the shift started.">
-          {(id) => <Input id={id} type="date" value={workDate} max={type === 'fieldwork' ? addDays(today, 60) : today} onChange={(e) => setWorkDate(e.target.value)} />}
+          {(id) => <Input id={id} type="date" value={workDate} max={remote ? addDays(today, 60) : today} onChange={(e) => setWorkDate(e.target.value)} />}
         </Field>
         {(type === 'missing_punch' || type === 'incorrect_punch') && (
           <>
@@ -194,9 +212,16 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
           </>
         )}
         {type === 'overtime' && <Field label="Overtime minutes">{(id) => <Input id={id} type="number" min={1} max={720} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />}</Field>}
-        {type === 'fieldwork' && (
+        {remote && (
           <>
-            <Field label="Purpose">{(id) => <Input id={id} value={fw.purpose} onChange={(e) => setFw({ ...fw, purpose: e.target.value })} placeholder="e.g. Client audit at ABC Corp." />}</Field>
+            {isWfh && (
+              <Alert tone="info">
+                Pin your home location: while at home, tap “Use my current location”. During the approved period you can clock in only within the radius of that location.
+              </Alert>
+            )}
+            <Field label={isWfh ? 'Work to be done' : 'Purpose'}>
+              {(id) => <Input id={id} value={fw.purpose} onChange={(e) => setFw({ ...fw, purpose: e.target.value })} placeholder={isWfh ? 'e.g. Prepare monthly financial report' : 'e.g. Client audit at ABC Corp.'} />}
+            </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="From">{(id) => <Input id={id} type="datetime-local" value={fw.startAt} onChange={(e) => setFw({ ...fw, startAt: e.target.value })} />}</Field>
               <Field label="Until">{(id) => <Input id={id} type="datetime-local" value={fw.endAt} onChange={(e) => setFw({ ...fw, endAt: e.target.value })} />}</Field>
@@ -204,22 +229,27 @@ function NewRequest({ tz, onClose, onDone }: { tz: string; onClose: () => void; 
             <Field label="Location rule">
               {(id) => (
                 <Select id={id} value={fw.mode} onChange={(e) => setFw({ ...fw, mode: e.target.value as typeof fw.mode })}>
-                  <option value="alternate_location">Alternate location (geofence at the site)</option>
+                  <option value="alternate_location">{isWfh ? 'My home location (geofence at home)' : 'Alternate location (geofence at the site)'}</option>
                   <option value="exemption">Location exemption (no geofence; location still recorded)</option>
                 </Select>
               )}
             </Field>
             {fw.mode === 'alternate_location' && (
               <>
-                <Field label="Site name">{(id) => <Input id={id} value={fw.locationName} onChange={(e) => setFw({ ...fw, locationName: e.target.value })} />}</Field>
+                <Field label={isWfh ? 'Location label' : 'Site name'}>{(id) => <Input id={id} value={fw.locationName} onChange={(e) => setFw({ ...fw, locationName: e.target.value })} />}</Field>
                 <div className="grid grid-cols-3 gap-2">
                   <Field label="Latitude">{(id) => <Input id={id} inputMode="decimal" value={fw.lat} onChange={(e) => setFw({ ...fw, lat: e.target.value })} />}</Field>
                   <Field label="Longitude">{(id) => <Input id={id} inputMode="decimal" value={fw.lng} onChange={(e) => setFw({ ...fw, lng: e.target.value })} />}</Field>
                   <Field label="Radius (m)">{(id) => <Input id={id} inputMode="numeric" value={fw.radiusMeters} onChange={(e) => setFw({ ...fw, radiusMeters: e.target.value })} />}</Field>
                 </div>
                 <Button variant="secondary" loading={locating} onClick={useHere}>
-                  Use my current location
+                  {isWfh ? 'Use my current location (I am at home)' : 'Use my current location'}
                 </Button>
+                {fw.lat && fw.lng && Number.isFinite(Number(fw.lat)) && Number.isFinite(Number(fw.lng)) && (
+                  <a className="text-sm font-semibold text-brand-700 underline" href={mapLinks(Number(fw.lat), Number(fw.lng)).openStreetMap} target="_blank" rel="noreferrer">
+                    Check this location on the map
+                  </a>
+                )}
               </>
             )}
           </>

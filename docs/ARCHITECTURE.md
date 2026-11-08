@@ -40,7 +40,7 @@ Everything is organization-scoped from the start: `organizations/{orgId}/...`. T
 | `…/shiftInstances/{uid_workDate}` | Shift state: schedule snapshot (`plan`), effective punches, corrected actions, event ids, version. **Derived and rebuildable.** Also the transaction lock for concurrent submissions. | Functions |
 | `…/adjustments/{id}` | **Immutable** approved correction: action, before, after, original event id, reason, reviewer, timestamp, request id | Functions (review / HR) |
 | `…/correctionRequests/{id}` | Missing/incorrect punch, explanation, overtime, fieldwork requests with status, reviewer, remarks | Functions |
-| `…/fieldworkAuthorizations/{id}` | Approved window + alternate location geofence or explicit exemption; revocable | Functions (review) |
+| `…/fieldworkAuthorizations/{id}` | Approved window + alternate location geofence or explicit exemption; revocable. `category` is `fieldwork` or `wfh` (work from home: geofence at the approved home location) | Functions (review) |
 | `…/overtimeApprovals/{id}` | Approved overtime minutes, tracked separately from potential overtime | Functions (review) |
 | `…/auditLogs/{id}` | Append-only: actor, role, action, target, before/after, reason, time | Functions |
 | `…/rateLimits/{key}` | Throttle windows (no client access) | Functions |
@@ -74,7 +74,8 @@ All calculations are pure functions in `shared/attendance.ts` and `shared/schedu
 - **Undertime:** departure before the (flex-adjusted) session end. A session with no punches at all is reported as *missing actions*, not undertime.
 - **Worked minutes:** sum of completed in/out pairs minus overlap with the single-pattern unpaid break window. Split patterns use the natural gap.
 - **Potential overtime:** time after the scheduled end once it reaches `overtimeThresholdMinutes` (default 30); on unscheduled days (rest day, holiday, no schedule) all worked time. **It is never auto-approved**; approved overtime comes only from approved overtime requests (`overtimeApprovals`).
-- **Statuses:** `upcoming`, `awaiting`, `in_progress`, `completed`, `incomplete` (missing actions after cutoff), `absent` (no punches after cutoff, not on leave/holiday/rest day/fieldwork), `leave`, `holiday`, `rest_day`, `no_schedule`, `fieldwork`. **No one is marked absent before their shift cutoff.**
+- **Work from home:** an approved WFH authorization adds the employee's home location as a geofence for its window (or an exemption). Events are validated as `wfh_location` / `wfh_exemption`; a WFH day without punches shows status `wfh` (exception `WFH_NO_PUNCH` after cutoff), never `absent`. Organization setting `wfhEnabled` controls whether employees can request it.
+- **Statuses:** `upcoming`, `awaiting`, `in_progress`, `completed`, `incomplete` (missing actions after cutoff), `absent` (no punches after cutoff, not on leave/holiday/rest day/fieldwork), `leave`, `holiday`, `rest_day`, `no_schedule`, `fieldwork`, `wfh`. **No one is marked absent before their shift cutoff.**
 - **Unscheduled attendance:** allowed by default (`allowUnscheduledAttendance`) on rest days, holidays or without a schedule; it is a single in/out pair flagged `UNSCHEDULED_WORK`, with clock-out allowed within `unscheduledMaxHours` (default 16).
 - **Holidays** apply to everyone; **leave** is full-day only in this version.
 - **Effective-dated assignments:** the assignment with the latest `effectiveFrom` on or before the date wins. Once a shift has started, its schedule **snapshot** is stored on the shift document, so later schedule edits do not rewrite history.

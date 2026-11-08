@@ -90,8 +90,9 @@ const STATUS_TONE: Record<DayStatus, Tone> = {
   rest_day: 'neutral',
   no_schedule: 'neutral',
   fieldwork: 'info',
+  wfh: 'info',
 };
-const STATUS_ICON: Partial<Record<DayStatus, string>> = { in_progress: '▶', awaiting: '…', upcoming: '◷', leave: '✈', holiday: '★', rest_day: '☾', fieldwork: '⚑' };
+const STATUS_ICON: Partial<Record<DayStatus, string>> = { in_progress: '▶', awaiting: '…', upcoming: '◷', leave: '✈', holiday: '★', rest_day: '☾', fieldwork: '⚑', wfh: '⌂' };
 
 export function StatusBadge({ status }: { status: DayStatus }) {
   return (

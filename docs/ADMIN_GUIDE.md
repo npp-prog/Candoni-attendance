@@ -23,6 +23,7 @@ There is no public sign-up. Only administrators create accounts.
 
 - **Missing / incorrect attendance:** approving creates a separate **adjustment** (before → after, your name, reason). The original event is never changed.
 - **Fieldwork:** approving creates an authorization for the requested window, either at an alternate site geofence or with a location exemption. Revocations are audited.
+- **Work from home:** the employee pins their home location (or requests an exemption). Check the pin with the *map* link before approving. Approval creates a work-from-home authorization for the window; attendance inside it is labelled *Work from home* in the dashboard, history and reports. Turn WFH requests on or off in **Settings → Attendance policy**.
 - **Overtime:** approving records approved minutes separately from potential overtime.
 - **Explanations:** acknowledge or reject; they do not change attendance.
 
@@ -43,7 +44,7 @@ Search, filter by department and status, paginate. On an employee page:
 
 Choose a report, date range (≤62 days), department, employee and status, then **Generate**. Export **CSV** or **Print**.
 
-- Daily attendance · Individual monthly time record (DTR-style, printable with signature lines) · Department summary · Late and undertime summary · Missing attendance and absences · Approved correction history · Fieldwork attendance.
+- Daily attendance · Individual monthly time record (DTR-style, printable with signature lines) · Department summary · Late and undertime summary · Missing attendance and absences · Approved correction history · Fieldwork & work-from-home attendance.
 - Corrected records are marked "Corrected" / `*`. Exports never include precise coordinates.
 - The monthly layout is DTR-style and **is not an official Civil Service Form 48**.
 
