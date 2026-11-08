@@ -1,0 +1,154 @@
+rules_version = '2';
+
+// Candoni Attendance security rules.
+//
+// Principles:
+//  * Clients NEVER write. Every create/update/delete goes through Cloud
+//    Functions (Admin SDK), which validate input, enforce roles and scope,
+//    and write audit logs. This includes attendance events.
+//  * Reads are least-privilege and organization-scoped. Roles and active
+//    status are read from the caller's member document on every request, so
+//    role changes and deactivation take effect immediately.
+//  * Precise location evidence and rejected attempts are visible only to the
+//    employee themself and to HR / system administrators.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid);
+    }
+
+    function me(orgId) {
+      return get(memberPath(orgId)).data;
+    }
+
+    function isActiveMember(orgId) {
+      return signedIn() && exists(memberPath(orgId)) && me(orgId).active == true;
+    }
+
+    function isAdmin(orgId) {
+      return isActiveMember(orgId) && me(orgId).role in ['hr', 'sysadmin'];
+    }
+
+    function supervises(orgId, departmentId) {
+      return isActiveMember(orgId)
+        && me(orgId).role == 'supervisor'
+        && departmentId in me(orgId).supervisedDepartmentIds;
+    }
+
+    // Owner, HR/sysadmin, or a supervisor of the record's department.
+    function canReadScoped(orgId, data) {
+      return isActiveMember(orgId) && (
+        data.memberId == request.auth.uid
+        || me(orgId).role in ['hr', 'sysadmin']
+        || supervises(orgId, data.departmentId)
+      );
+    }
+
+    // Owner or HR/sysadmin only (sensitive data such as coordinates).
+    function canReadSensitive(orgId, data) {
+      return isActiveMember(orgId) && (data.memberId == request.auth.uid || me(orgId).role in ['hr', 'sysadmin']);
+    }
+
+    // Maps a user to their organization. Readable by the user only.
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /organizations/{orgId} {
+      allow read: if isActiveMember(orgId);
+      allow write: if false;
+
+      // Member profiles: self, HR/sysadmin, or supervisors of the member's department.
+      match /members/{uid} {
+        // A deactivated user may still read their own profile to see why access is blocked.
+        allow get: if signedIn() && request.auth.uid == uid;
+        allow read: if isAdmin(orgId) || supervises(orgId, resource.data.departmentId);
+        allow write: if false;
+      }
+
+      // Reference data any active member may read.
+      match /departments/{id} {
+        allow read: if isActiveMember(orgId);
+        allow write: if false;
+      }
+      match /workplaces/{id} {
+        allow read: if isActiveMember(orgId);
+        allow write: if false;
+      }
+      match /schedules/{id} {
+        allow read: if isActiveMember(orgId);
+        allow write: if false;
+      }
+      match /holidays/{id} {
+        allow read: if isActiveMember(orgId);
+        allow write: if false;
+      }
+
+      match /scheduleAssignments/{id} {
+        allow read: if isActiveMember(orgId) && (resource.data.memberId == request.auth.uid || isAdmin(orgId));
+        allow write: if false;
+      }
+
+      // Attendance data scoped to owner / supervisor department / HR.
+      match /shiftInstances/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /attendanceEvents/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /adjustments/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /correctionRequests/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /fieldworkAuthorizations/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /overtimeApprovals/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+      match /leaves/{id} {
+        allow read: if canReadScoped(orgId, resource.data);
+        allow write: if false;
+      }
+
+      // Sensitive: exact coordinates and rejected attempts.
+      match /attendanceLocationEvidence/{id} {
+        allow read: if canReadSensitive(orgId, resource.data);
+        allow write: if false;
+      }
+      match /attendanceAttempts/{id} {
+        allow read: if canReadSensitive(orgId, resource.data);
+        allow write: if false;
+      }
+
+      match /auditLogs/{id} {
+        allow read: if isAdmin(orgId);
+        allow write: if false;
+      }
+
+      // Internal throttling state.
+      match /rateLimits/{id} {
+        allow read, write: if false;
+      }
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
