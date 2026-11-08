@@ -1,6 +1,6 @@
 import type { OrgSettings } from './types';
 
-export const DEFAULT_PRIVACY_NOTICE = `Candoni Attendance collects your device location ONLY at the moment you tap an attendance action (for example, Clock In or Clock Out). It is used to check that you are within an authorized workplace area, an approved fieldwork location, or your approved work-from-home location.
+export const DEFAULT_PRIVACY_NOTICE = `ClockUp collects your device location ONLY at the moment you tap an attendance action (for example, Clock In or Clock Out). It is used to check that you are within an authorized workplace area, an approved fieldwork location, or your approved work-from-home location.
 
 What is collected: latitude, longitude, the accuracy reported by your device, and the time the reading was captured, together with the official server time of your attendance action.
 

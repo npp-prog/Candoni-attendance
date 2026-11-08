@@ -1,5 +1,5 @@
 /**
- * Shared domain types for Candoni Attendance.
+ * Shared domain types for ClockUp.
  *
  * These types describe Firestore documents (all scoped under
  * organizations/{orgId}/...) and the payloads exchanged with Cloud Functions.

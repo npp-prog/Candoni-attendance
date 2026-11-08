@@ -23,7 +23,7 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-const DEFAULT_BRANDING: Branding = { name: 'Candoni Attendance', shortName: 'Candoni', logoUrl: null };
+const DEFAULT_BRANDING: Branding = { name: 'ClockUp', shortName: 'ClockUp', logoUrl: null };
 const Ctx = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {

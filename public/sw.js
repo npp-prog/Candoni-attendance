@@ -1,11 +1,11 @@
 /*
- * Candoni Attendance service worker.
+ * ClockUp service worker.
  * Caches ONLY the application shell and static, versioned assets from this
  * origin. It never caches API, Firestore, Auth or Functions traffic (all
  * cross-origin), so no employee records are stored by the service worker.
  * Attendance is never queued offline.
  */
-const CACHE = 'candoni-shell-v1';
+const CACHE = 'clockup-shell-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

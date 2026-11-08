@@ -23,7 +23,7 @@ export function BrandHeader({ compact }: { compact?: boolean }) {
       <BrandMark size={compact ? 32 : 44} />
       <div className="min-w-0 leading-tight">
         <p className={cx('truncate font-bold text-navy-900', compact ? 'text-base' : 'text-lg')}>{compact ? branding.shortName : branding.name}</p>
-        {!compact && <p className="text-xs text-slate-600">Attendance</p>}
+        {!compact && <p className="text-xs text-slate-600">ClockUp attendance</p>}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
-# Candoni Attendance
+# ClockUp
 
 A mobile-first employee attendance web app (PWA). Employees sign in on their own phones, capture a fresh location only when they tap **Clock In / Clock Out**, and a trusted Cloud Function validates the request (employee status, schedule, next valid action, accuracy, location age, geofence) before recording it with a server timestamp. Supervisors and HR manage employees, workplaces, schedules, corrections, fieldwork and reports.
 
-The organization name and logo are configurable (Settings → Branding). "Candoni Attendance" is the working name.
+The organization name and logo are configurable (Settings → Branding). "ClockUp" is the product name (formerly "Candoni Attendance").
 
 > **Important limitation:** browser location is supplied by the device and can be spoofed. Server-side geofence validation is supporting evidence, **not proof of physical presence**, and this app is not equivalent to biometric verification. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-model-and-limitations).
 
