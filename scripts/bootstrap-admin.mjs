@@ -5,7 +5,7 @@
  *   gcloud auth application-default login        # or set GOOGLE_APPLICATION_CREDENTIALS
  *   node scripts/bootstrap-admin.mjs --project my-project --org candoni \
  *        --org-name "Candoni Accounting" --email admin@example.com \
- *        --full-name "Jane Admin" --employee-number A-0001
+ *        --full-name "Jane Admin" --employee-number A-0001 [--database candoni-attendance]
  *
  * It prints a one-time password setup link (it never sets or prints a password).
  * Refuses to run against an organization that already has an active system
@@ -24,6 +24,7 @@ const { values: a } = parseArgs({
     'employee-number': { type: 'string', default: 'ADMIN-0001' },
     department: { type: 'string', default: 'Administration' },
     timezone: { type: 'string', default: 'Asia/Manila' },
+    database: { type: 'string', default: '(default)' },
   },
 });
 for (const k of ['project', 'org-name', 'email', 'full-name']) {
@@ -46,7 +47,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore } = require('firebase-admin/firestore');
 
 initializeApp({ credential: applicationDefault(), projectId: a.project });
-const db = getFirestore();
+const db = a.database === '(default)' ? getFirestore() : getFirestore(a.database);
 const auth = getAuth();
 const org = db.collection('organizations').doc(a.org);
 

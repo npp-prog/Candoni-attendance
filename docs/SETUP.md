@@ -124,3 +124,18 @@ Limitations: older browsers or strict privacy/ad-blocking setups may fail reCAPT
 | `VITE_USE_EMULATORS` | `.env.development.local` only | Connect to local emulators |
 | `FUNCTIONS_REGION` | `functions/.env` | Deployment region |
 | `ENFORCE_APP_CHECK` | `functions/.env` | Require App Check tokens on callables |
+
+## Production notes for candoni-attendance-813a0
+
+- Firestore uses the **named database `candoni-attendance`** (asia-southeast1). Mapping: `.firebaserc` target `main` → `candoni-attendance` for this project; `functions/.env.candoni-attendance-813a0` sets `FIRESTORE_DATABASE_ID`; `.env.production` sets `VITE_FIRESTORE_DATABASE_ID`. The emulators keep using `(default)`.
+- The Firebase CLI auto-created an empty `(default)` database during the first rules deploy. It has no rules release (all client access denied) and is unused.
+- **Build service account permissions:** in this Google Workspace organization the Compute Engine default service account (`64568184628-compute@developer.gserviceaccount.com`) has no roles, so function builds fail. Grant it (least privilege):
+  ```bash
+  SA=serviceAccount:64568184628-compute@developer.gserviceaccount.com
+  for R in roles/cloudbuild.builds.builder roles/datastore.user roles/firebaseauth.admin roles/logging.logWriter; do
+    gcloud projects add-iam-policy-binding candoni-attendance-813a0 --member=$SA --role=$R --condition=None
+  done
+  ```
+  Then redeploy: `npx firebase deploy --project prod --only functions --force`.
+- If the organization enforces **Domain restricted sharing** (`iam.allowedPolicyMemberDomains`), the deploy cannot make the callable functions publicly invokable (`allUsers`), and the web app will get permission errors. Allow an exception for this project or ask your Workspace admin.
+- Bootstrap command used: `node scripts/bootstrap-admin.mjs --project candoni-attendance-813a0 --database candoni-attendance --org candoni ...`

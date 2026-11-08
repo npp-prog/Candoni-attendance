@@ -29,7 +29,9 @@ if (!useEmulators && env.VITE_APPCHECK_RECAPTCHA_ENTERPRISE_KEY) {
 }
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Production uses the named database "candoni-attendance" (see .env.production).
+const databaseId = env.VITE_FIRESTORE_DATABASE_ID || '(default)';
+export const db = databaseId === '(default)' ? getFirestore(app) : getFirestore(app, databaseId);
 export const functions = getFunctions(app, env.VITE_FUNCTIONS_REGION || 'asia-southeast1');
 export const ORG_ID = env.VITE_ORG_ID || 'candoni';
 

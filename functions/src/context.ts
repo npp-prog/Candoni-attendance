@@ -7,7 +7,9 @@ import type { MemberDoc, OrganizationDoc, OrgSettings } from '../../shared/types
 
 if (!getApps().length) initializeApp();
 
-export const db: Firestore = getFirestore();
+/** Firestore database id; production uses a named database (functions/.env.<projectId>). */
+export const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || '(default)';
+export const db: Firestore = DATABASE_ID === '(default)' ? getFirestore() : getFirestore(DATABASE_ID);
 try {
   db.settings({ ignoreUndefinedProperties: true });
 } catch {
