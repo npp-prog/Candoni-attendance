@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Toast } from '../../components/ui';
+import { Alert, PageLoader, Badge, Button, Card, EmptyState, Field, Input, Modal, Toast } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { callApi } from '../../lib/api';
 import { useCollection } from '../../lib/hooks';
@@ -40,6 +40,7 @@ export default function Departments() {
         </Button>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
+      {!items && !error && <PageLoader />}
       {items && list.length === 0 && <EmptyState title="No departments yet" />}
       <Card>
         <ul className="divide-y divide-slate-100">

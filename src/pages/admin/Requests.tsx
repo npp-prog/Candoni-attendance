@@ -2,7 +2,7 @@ import { collection, limit, onSnapshot, orderBy, query, where, type QueryConstra
 import { useEffect, useMemo, useState } from 'react';
 import { canReviewRequest, isAttendanceAdmin } from '../../../shared/roles';
 import { REQUEST_TYPE_LABELS, type RequestType } from '../../../shared/types';
-import { Alert, Button, Card, EmptyState, Field, Input, Modal, Pager, Select, Textarea, Toast, usePaged } from '../../components/ui';
+import { Alert, PageLoader, Button, Card, EmptyState, Field, Input, Modal, Pager, Select, Textarea, Toast, usePaged } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { db } from '../../firebase';
 import { callApi } from '../../lib/api';
@@ -89,6 +89,7 @@ export default function AdminRequests() {
         <Field label="Search">{(id) => <Input id={id} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Employee" />}</Field>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
+      {!items && !error && <PageLoader />}
       {items && filtered.length === 0 && <EmptyState title={status === 'pending' ? 'No pending requests' : 'No requests found'} />}
       <ul className="flex flex-col gap-2">
         {paged.slice.map((r) => {

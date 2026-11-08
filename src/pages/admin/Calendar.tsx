@@ -2,7 +2,7 @@ import { orderBy, where } from 'firebase/firestore';
 import { useState } from 'react';
 import { localDate } from '../../../shared/time';
 import type { HolidayDoc, LeaveDoc } from '../../../shared/types';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Pager, Select, Toast, usePaged } from '../../components/ui';
+import { Alert, PageLoader, Badge, Button, Card, EmptyState, Field, Input, Pager, Select, Toast, usePaged } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { callApi } from '../../lib/api';
 import { fmtDateShort } from '../../lib/format';
@@ -39,6 +39,7 @@ export default function Calendar() {
       {error && <Alert tone="danger">{error}</Alert>}
       <Card title="Holiday calendar" actions={<Input aria-label="Year" type="number" className="w-28" value={year} onChange={(e) => setYear(e.target.value)} />}>
         <p className="mb-2 text-sm text-slate-600">Holidays are non-working days for everyone. Work on a holiday is recorded as unscheduled and flagged as potential overtime. Verify official proclamations each year.</p>
+        {!holidays && <PageLoader />}
         {holidays && holidays.length === 0 && <EmptyState title={`No holidays for ${year}`} />}
         <ul className="divide-y divide-slate-100">
           {(holidays ?? []).map((x) => (

@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFirestoreEmulator, initializeFirestore, memoryLocalCache, memoryLruGarbageCollector } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
 const env = import.meta.env;
@@ -31,7 +31,14 @@ if (!useEmulators && env.VITE_APPCHECK_RECAPTCHA_ENTERPRISE_KEY) {
 export const auth = getAuth(app);
 // Production uses the named database "candoni-attendance" (see .env.production).
 const databaseId = env.VITE_FIRESTORE_DATABASE_ID || '(default)';
-export const db = databaseId === '(default)' ? getFirestore(app) : getFirestore(app, databaseId);
+// In-memory cache with LRU eviction: revisiting a page shows the last data
+// instantly while listeners refresh it. Nothing is persisted to the device
+// (no IndexedDB), so employee records are cleared when the tab closes.
+export const db = initializeFirestore(
+  app,
+  { localCache: memoryLocalCache({ garbageCollector: memoryLruGarbageCollector({ cacheSizeBytes: 20 * 1024 * 1024 }) }) },
+  databaseId,
+);
 export const functions = getFunctions(app, env.VITE_FUNCTIONS_REGION || 'asia-southeast1');
 export const ORG_ID = env.VITE_ORG_ID || 'candoni';
 

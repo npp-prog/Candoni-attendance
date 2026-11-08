@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { mapLinks } from '../../../shared/geo';
 import type { WorkplaceDoc } from '../../../shared/types';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Textarea, Toast } from '../../components/ui';
+import { Alert, PageLoader, Badge, Button, Card, EmptyState, Field, Input, Modal, Textarea, Toast } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { callApi } from '../../lib/api';
 import { getFreshPosition } from '../../lib/geolocation';
@@ -27,6 +27,7 @@ export default function Workplaces() {
         Attendance is accepted only within a workplace’s radius. The radius is never enlarged automatically for poor GPS accuracy. Typical values: 50–150 m for a building, larger for campuses.
       </p>
       {error && <Alert tone="danger">{error}</Alert>}
+      {!items && !error && <PageLoader />}
       {items && list.length === 0 && <EmptyState title="No workplaces yet">Add one so employees can clock in.</EmptyState>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {list.map((w) => (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SCHEDULE_DEFAULTS, validateSchedule, isOvernight } from '../../../shared/schedule';
 import type { ScheduleDoc } from '../../../shared/types';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Toast } from '../../components/ui';
+import { Alert, PageLoader, Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Toast } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { callApi } from '../../lib/api';
 import { useCollection } from '../../lib/hooks';
@@ -39,6 +39,7 @@ export default function Schedules() {
       </div>
       <p className="text-sm text-slate-600">Editing a schedule affects shifts that have not started yet. Shifts already started keep a snapshot of the schedule they began with.</p>
       {error && <Alert tone="danger">{error}</Alert>}
+      {!items && !error && <PageLoader />}
       {items && list.length === 0 && <EmptyState title="No schedules yet" />}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {list.map((s) => (

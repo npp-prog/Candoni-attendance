@@ -2,7 +2,7 @@ import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/f
 import { useEffect, useState } from 'react';
 import { addDays, localDate } from '../../../shared/time';
 import { ACTION_LABELS, REQUEST_TYPE_LABELS, type AttendanceAction, type RequestType } from '../../../shared/types';
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Pager, Select, Textarea, Toast, usePaged } from '../../components/ui';
+import { Alert, PageLoader, Badge, Button, Card, EmptyState, Field, Input, Modal, Pager, Select, Textarea, Toast, usePaged } from '../../components/ui';
 import { useSession } from '../../context/AuthContext';
 import { db } from '../../firebase';
 import { callApi } from '../../lib/api';
@@ -77,6 +77,7 @@ export default function Requests() {
       </div>
       <p className="text-sm text-slate-600">Ask for a missing or incorrect entry to be corrected, explain an exception, request overtime approval, or request official business / fieldwork authorization. Requests take effect only after approval.</p>
       {error && <Alert tone="danger">{error}</Alert>}
+      {!items && !error && <PageLoader />}
       {items && items.length === 0 && <EmptyState title="No requests yet" />}
       <ul className="flex flex-col gap-2">
         {paged.slice.map((r) => (

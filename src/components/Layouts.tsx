@@ -1,8 +1,9 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { canAccessAdminConsole, isAttendanceAdmin, isSysAdmin } from '../../shared/roles';
 import { useSession } from '../context/AuthContext';
 import { BrandHeader } from './Brand';
-import { Alert, cx, useOnline } from './ui';
+import { Alert, cx, PageLoader, useOnline } from './ui';
 
 function OfflineBanner() {
   const online = useOnline();
@@ -37,7 +38,9 @@ export function EmployeeLayout() {
         </div>
       </header>
       <main className="mx-auto max-w-xl px-4 py-4">
-        <Outlet />
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
       </main>
       <nav className="no-print safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white" aria-label="Main">
         <ul className="mx-auto grid max-w-xl grid-cols-4">
@@ -124,7 +127,9 @@ export function AdminLayout() {
       <div className="min-w-0 flex-1">
         <OfflineBanner />
         <main className="mx-auto max-w-6xl px-4 py-4">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
