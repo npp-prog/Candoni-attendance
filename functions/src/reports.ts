@@ -29,10 +29,10 @@ async function scopedMembers(caller: Caller, filter: { departmentId?: string; me
 }
 
 export async function dailyMonitor(caller: Caller, raw: unknown, now = Date.now()) {
-  const input = z.object({ date: dateStr.optional(), departmentId: z.string().optional() }).parse(raw ?? {});
+  const input = z.object({ date: dateStr.nullish(), departmentId: z.string().max(128).nullish() }).parse(raw ?? {});
   const tz = caller.org.settings.timezone;
   const date = input.date ?? localDate(now, tz);
-  const members = await scopedMembers(caller, { departmentId: input.departmentId });
+  const members = await scopedMembers(caller, { departmentId: input.departmentId ?? undefined });
   const rows = members.length ? await computeRange(caller.orgId, tz, members, date, date, now) : [];
   return { date, timezone: tz, serverTime: now, summary: summarize(rows), rows };
 }
@@ -41,9 +41,9 @@ const reportSchema = z.object({
   type: z.enum(['daily', 'dtr', 'department_summary', 'late_undertime', 'missing_absence', 'corrections', 'fieldwork']),
   from: dateStr,
   to: dateStr,
-  departmentId: z.string().max(128).optional(),
-  memberId: z.string().max(128).optional(),
-  status: z.string().max(40).optional(),
+  departmentId: z.string().max(128).nullish(),
+  memberId: z.string().max(128).nullish(),
+  status: z.string().max(40).nullish(),
 });
 
 export async function runReport(caller: Caller, raw: unknown, now = Date.now()) {
@@ -52,7 +52,7 @@ export async function runReport(caller: Caller, raw: unknown, now = Date.now()) 
   if (addDays(input.from, 62) <= input.to) throw new HttpsError('invalid-argument', 'Reports are limited to 62 days. Narrow the range.');
   const tz = caller.org.settings.timezone;
   if (input.type === 'dtr' && !input.memberId) throw new HttpsError('invalid-argument', 'Choose an employee for the monthly time record.');
-  const members = await scopedMembers(caller, { departmentId: input.departmentId, memberId: input.memberId, includeInactive: !!input.memberId });
+  const members = await scopedMembers(caller, { departmentId: input.departmentId ?? undefined, memberId: input.memberId ?? undefined, includeInactive: !!input.memberId });
   const base = { type: input.type, from: input.from, to: input.to, timezone: tz, generatedAt: now, generatedBy: caller.member.fullName };
 
   if (input.type === 'corrections') {

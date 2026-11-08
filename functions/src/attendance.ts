@@ -27,6 +27,8 @@ export const clockSchema = z.object({
       lng: z.number(),
       accuracy: z.number(),
       capturedAt: z.number().int(),
+      /** Device clock when the request was sent; lets age be measured on one clock. */
+      sentAt: z.number().int().optional(),
     })
     .nullable()
     .optional(),
@@ -162,8 +164,13 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
     if (loc.accuracy > settings.maxAccuracyMeters) {
       throw new Rejection('LOCATION_INACCURATE', { accuracyMeters: Math.round(loc.accuracy), maxAccuracyMeters: settings.maxAccuracyMeters });
     }
-    if (loc.capturedAt > now + LIMITS.futureSkewSeconds * 1000) throw new Rejection('LOCATION_FROM_FUTURE');
-    const ageSeconds = Math.max(0, (now - loc.capturedAt) / 1000);
+    // Location age is measured on the device clock (sentAt - capturedAt) when
+    // available, so a phone whose clock is off does not cause false "stale"
+    // rejections. Without sentAt, the server clock is used.
+    const reference = loc.sentAt ?? now;
+    if (loc.capturedAt > reference + LIMITS.futureSkewSeconds * 1000) throw new Rejection('LOCATION_FROM_FUTURE');
+    if (loc.sentAt != null && Math.abs(now - loc.sentAt) > 24 * 3_600_000) throw new Rejection('LOCATION_FROM_FUTURE');
+    const ageSeconds = Math.max(0, (reference - loc.capturedAt) / 1000);
     if (ageSeconds > settings.maxLocationAgeSeconds) {
       throw new Rejection('LOCATION_STALE', { ageSeconds: Math.round(ageSeconds), maxLocationAgeSeconds: settings.maxLocationAgeSeconds });
     }
@@ -258,7 +265,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         workplaceName,
         distanceMeters,
         accuracyMeters: Math.round(loc.accuracy * 10) / 10,
-        locationAgeSeconds: Math.round(((official - loc.capturedAt) / 1000) * 10) / 10,
+        locationAgeSeconds: Math.round(ageSeconds * 10) / 10,
         unscheduled: plan.unscheduled,
       };
       tx.create(eventRef, event);
@@ -272,6 +279,8 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         accuracyMeters: loc.accuracy,
         capturedAt: loc.capturedAt,
         receivedAt: official,
+        deviceSentAt: loc.sentAt ?? null,
+        deviceClockSkewSeconds: loc.sentAt != null ? Math.round((loc.sentAt - official) / 1000) : null,
         workplaceId,
         distanceMeters,
       });

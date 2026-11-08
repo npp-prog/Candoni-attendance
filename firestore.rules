@@ -60,6 +60,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public sign-in branding (organization name and logo only).
+    match /branding/{orgId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /organizations/{orgId} {
       allow read: if isActiveMember(orgId);
       allow write: if false;
