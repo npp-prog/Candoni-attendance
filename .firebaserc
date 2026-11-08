@@ -1,1 +1,6 @@
-{ "projects": { "default": "demo-candoni" } }
+{
+  "projects": {
+    "default": "demo-candoni",
+    "prod": "candoni-attendance-813a0"
+  }
+}

@@ -2,7 +2,7 @@
 
 This guide covers local development, the Firebase project, deploying the backend to Firebase, deploying the frontend to Netlify, and creating the first administrator securely.
 
-**Status of this repository:** the application was built and verified against the Firebase Emulator Suite. No production Firebase project, Netlify site, or credentials were available, so **nothing has been deployed**. The steps below are what remains.
+**Status of this repository:** the application was built and verified against the Firebase Emulator Suite. The frontend is configured for Firebase project `candoni-attendance-813a0`, but **nothing has been deployed** yet (no deploy credentials were available to the developer). Steps 4–9 below are what remains.
 
 ## 1. Prerequisites
 
@@ -44,13 +44,13 @@ To test on a phone on the same Wi-Fi network you need HTTPS (browsers only allow
 3. **Authentication → Settings → Authorized domains:** add your Netlify domain(s) (e.g. `candoni-attendance.netlify.app` and any custom domain).
 4. **Authentication → Templates:** customize the password-reset email sender name (used for account invitations and password resets).
 5. **Firestore Database:** create in **Native mode**, location **`asia-southeast1` (Singapore)** — closest to Manila and matching the functions region. The location cannot be changed later.
-6. **Project settings → Your apps:** add a **Web app**. Copy its config into `.env` (see `.env.example`).
-7. Point the CLI at the project:
+6. **Project settings → Your apps:** add a **Web app**. Its config for project **`candoni-attendance-813a0`** is already committed in `.env.production` (used by `npm run build`; Netlify variables with the same names override it).
+7. `.firebaserc` already defines the alias `prod` → `candoni-attendance-813a0` (the default stays `demo-candoni` for emulators). Log in once:
    ```bash
    npx firebase login
-   npx firebase use --add        # choose the project, alias "prod"
    ```
-   Keep `.firebaserc`'s `demo-candoni` default for emulators; pass `--project prod` for real deployments.
+   Always pass `--project prod` for real deployments.
+8. Recommended: in Google Cloud console → **APIs & Services → Credentials**, restrict the browser API key with **HTTP referrers** (your Netlify domain(s) and `candoni-attendance-813a0.firebaseapp.com`).
 
 ## 5. Deploy the backend (rules, indexes, functions)
 
@@ -90,8 +90,7 @@ Then delete any downloaded service-account key. All further accounts are created
 ## 7. Deploy the frontend to Netlify
 
 1. Create a Netlify site from this repository (or `npx netlify deploy`). `netlify.toml` already sets the build command (`npm run build`), publish directory (`dist`), Node 22, SPA routing, and security headers (including a Content-Security-Policy and `Permissions-Policy: geolocation=(self)`).
-2. In **Site configuration → Environment variables**, set every variable from `.env.example`:
-   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_ORG_ID`, `VITE_FUNCTIONS_REGION`, and optionally `VITE_APPCHECK_RECAPTCHA_ENTERPRISE_KEY`. **Leave `VITE_USE_EMULATORS` unset/false.**
+2. Environment variables: the Firebase web config is already in `.env.production`, so no Netlify variables are required. To change a value (e.g. add `VITE_APPCHECK_RECAPTCHA_ENTERPRISE_KEY`), set it in **Site configuration → Environment variables**; those override the file. **Never set `VITE_USE_EMULATORS=true` in production.**
 3. Deploy. Add the Netlify domain to Firebase Auth authorized domains (step 4.3).
 4. If you use a custom logo URL, it must be `https://`. If you change the CSP, keep `connect-src` covering `*.googleapis.com`, `*.cloudfunctions.net` and `*.run.app`.
 
