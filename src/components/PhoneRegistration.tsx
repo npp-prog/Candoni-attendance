@@ -68,7 +68,7 @@ export function PhoneRegistrationCard({ device, onChanged, compact }: { device: 
           <p>
             {device.required
               ? 'Your organization requires you to clock in from your own registered phone, confirmed with its fingerprint, face or PIN.'
-              : 'Registering your phone is optional for you right now; your organization may require it later.'}{' '}
+              : 'Registering your phone is optional for you right now. Once registered, every clock-in must be confirmed on this phone.'}{' '}
             The check happens on your phone; ClockUp never receives your fingerprint, face or PIN.
           </p>
         )}

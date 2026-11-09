@@ -115,7 +115,7 @@ function OrgSettingsForm() {
             {(id) => (
               <Select id={id} value={s.deviceBinding.mode} onChange={(e) => setS({ ...s, deviceBinding: { ...s.deviceBinding, mode: e.target.value as OrgSettings['deviceBinding']['mode'] } })}>
                 <option value="off">Off</option>
-                <option value="selected">Pilot: only employees marked on their profile</option>
+                <option value="selected">Pilot: employees marked on their profile, and anyone who registered a phone</option>
                 <option value="all">Required for everyone</option>
               </Select>
             )}

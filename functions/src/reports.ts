@@ -208,12 +208,51 @@ const RAPID_WINDOW_MS = 15 * 60_000;
  */
 async function deviceAnomalies(orgId: string, members: MemberDoc[], fromMs: number, toMs: number) {
   const names = new Map(members.map((m) => [m.uid, m.fullName]));
-  const [evidence, attempts, pending] = await Promise.all([
-    col(orgId, 'attendanceLocationEvidence').where('receivedAt', '>=', fromMs).where('receivedAt', '<', toMs).select('memberId', 'deviceHint', 'receivedAt').get(),
+  const [evidence, attempts, pending, phones] = await Promise.all([
+    col(orgId, 'attendanceLocationEvidence').where('receivedAt', '>=', fromMs).where('receivedAt', '<', toMs).select('memberId', 'deviceHint', 'receivedAt', 'workDate', 'deviceVerified').get(),
     col(orgId, 'attendanceAttempts').where('at', '>=', fromMs).where('at', '<', toMs).select('memberId', 'code', 'deviceHint', 'at').get(),
     col(orgId, 'devices').where('status', '==', 'pending').get(),
+    col(orgId, 'devices').get(),
   ]);
   const rows: Row[] = [];
+  // Phones each employee has registered, by browser hint and registration time.
+  const registered = new Map<string, { hints: Set<string>; since: number }>();
+  for (const d of phones.docs) {
+    if (!['active', 'replaced'].includes(d.get('status'))) continue;
+    const r = registered.get(d.get('memberId')) ?? { hints: new Set<string>(), since: Infinity };
+    if (d.get('deviceHint')) r.hints.add(d.get('deviceHint'));
+    r.since = Math.min(r.since, d.get('approvedAt') ?? d.get('createdAt'));
+    registered.set(d.get('memberId'), r);
+  }
+  // One employee, several phones: clock actions after registration from another
+  // phone without confirmation, and actions in one shift from different phones.
+  const unregistered = new Map<string, number[]>();
+  const perShift = new Map<string, { memberId: string; workDate: string; hints: Set<string>; times: number[] }>();
+  for (const d of evidence.docs) {
+    const memberId = d.get('memberId') as string;
+    const hint = d.get('deviceHint') as string | null;
+    const at = d.get('receivedAt') as number;
+    if (!names.has(memberId) || !hint) continue;
+    const reg = registered.get(memberId);
+    if (reg && at >= reg.since && d.get('deviceVerified') !== true && !reg.hints.has(hint)) {
+      if (!unregistered.has(memberId)) unregistered.set(memberId, []);
+      unregistered.get(memberId)!.push(at);
+    }
+    const key = `${memberId}_${d.get('workDate')}`;
+    const s = perShift.get(key) ?? { memberId, workDate: d.get('workDate'), hints: new Set<string>(), times: [] as number[] };
+    s.hints.add(hint);
+    s.times.push(at);
+    perShift.set(key, s);
+  }
+  for (const [memberId, times] of unregistered) {
+    times.sort((a, b) => a - b);
+    rows.push({ kind: 'unregistered_phone', severity: 'high', description: `${times.length} clock action(s) from a phone other than the employee’s registered phone, without phone confirmation.`, employees: [names.get(memberId)], device: null, count: times.length, firstAt: times[0], lastAt: times[times.length - 1] });
+  }
+  for (const s of perShift.values()) {
+    if (s.hints.size < 2) continue;
+    s.times.sort((a, b) => a - b);
+    rows.push({ kind: 'different_phones_same_shift', severity: 'medium', description: `Clock actions on ${s.workDate} were made from ${s.hints.size} different phones.`, employees: [names.get(s.memberId)], device: null, count: s.times.length, firstAt: s.times[0], lastAt: s.times[s.times.length - 1] });
+  }
   const byHint = new Map<string, { memberId: string; at: number }[]>();
   for (const d of evidence.docs) {
     const hint = d.get('deviceHint') as string | null;

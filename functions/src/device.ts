@@ -84,12 +84,23 @@ async function devicesOf(orgId: string, memberId: string) {
   return snap.docs.map((d) => ({ ...(d.data() as StoredDevice), id: d.id, ref: d.ref }));
 }
 
+/**
+ * Whether a clock-in must be confirmed on the registered phone. Required when
+ * the organization setting applies to the member, AND always once the member
+ * has an active registered phone (unless the feature is switched off), so a
+ * registered phone can never be silently bypassed by using another phone.
+ */
+export function phoneCheckRequired(caller: Caller, hasActivePhone: boolean): boolean {
+  if (caller.org.settings.deviceBinding.mode === 'off') return false;
+  return deviceBindingApplies(caller.org.settings, caller.member) || hasActivePhone;
+}
+
 export async function deviceSummary(caller: Caller) {
   const devices = await devicesOf(caller.orgId, caller.uid);
   const active = devices.find((d) => d.status === 'active');
   const pending = devices.find((d) => d.status === 'pending');
   return {
-    required: deviceBindingApplies(caller.org.settings, caller.member),
+    required: phoneCheckRequired(caller, !!active),
     mode: caller.org.settings.deviceBinding.mode,
     status: active ? ('active' as const) : pending ? ('pending' as const) : ('none' as const),
     activeLabel: active?.label ?? null,
@@ -279,10 +290,10 @@ export type DeviceCheck =
  * the employee's active registered phone, with user verification required.
  */
 export async function checkDevice(caller: Caller, assertion: unknown): Promise<DeviceCheck> {
-  const required = deviceBindingApplies(caller.org.settings, caller.member);
-  if (!required) return { ok: true, required: false, credentialId: null };
   const devices = await devicesOf(caller.orgId, caller.uid);
   const active = devices.filter((d) => d.status === 'active');
+  const required = phoneCheckRequired(caller, active.length > 0);
+  if (!required) return { ok: true, required: false, credentialId: null };
   if (!active.length) return { ok: false, code: devices.some((d) => d.status === 'pending') ? 'DEVICE_PENDING_APPROVAL' : 'DEVICE_NOT_REGISTERED' };
   if (!assertion || typeof assertion !== 'object') return { ok: false, code: 'DEVICE_VERIFICATION_REQUIRED' };
   const response = assertion as AuthenticationResponseJSON;
