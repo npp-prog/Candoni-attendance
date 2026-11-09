@@ -214,3 +214,15 @@ describe('effective punches', () => {
     expect(r.exceptions).toContain('CORRECTED');
   });
 });
+
+describe('work from home', () => {
+  it('shows approved WFH instead of awaiting or absent, and flags missing punches after cutoff', () => {
+    const p = buildShiftPlan({ date: '2026-03-02', tz: 'Asia/Manila', schedule: { id: 'reg', name: 'R', pattern: 'single', sessions: [{ start: '08:00', end: '17:00' }], workDays: [1, 2, 3, 4, 5], graceMinutes: 15, breakStart: null, breakEnd: null, flexible: false, flexMinutes: 0, earlyInMinutes: 120, cutoffMinutes: 240, overtimeThresholdMinutes: 30, active: true }, holiday: null });
+    const ctx = (now: number) => ({ now, onLeave: false, hasFieldwork: false, hasWfh: true });
+    expect(computeDay(p, {}, ctx(zonedToUtc('2026-03-02', 10 * 60, 'Asia/Manila'))).status).toBe('wfh');
+    const after = computeDay(p, {}, ctx(zonedToUtc('2026-03-02', 22 * 60, 'Asia/Manila')));
+    expect(after.status).toBe('wfh');
+    expect(after.exceptions).toContain('WFH_NO_PUNCH');
+    expect(after.exceptions).not.toContain('ABSENT');
+  });
+});

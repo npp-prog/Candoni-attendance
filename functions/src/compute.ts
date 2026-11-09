@@ -23,6 +23,7 @@ export interface DayRow extends DayComputation {
   holidayName: string | null;
   onLeave: boolean;
   hasFieldwork: boolean;
+  hasWfh: boolean;
   approvedOvertimeMinutes: number;
   unscheduled: boolean;
   workplaceNames: string[];
@@ -73,11 +74,13 @@ export async function computeRange(orgId: string, tz: string, members: MemberDoc
       const shift: ShiftDoc | undefined = shifts.get(key);
       const plan = shift?.plan ?? planFor(sctx, m.uid, date);
       const leave = onLeave(leaves, m.uid, date);
-      const fw = fieldworkOnPlan(fieldwork, m.uid, plan, tz);
+      const fw = fieldworkOnPlan(fieldwork, m.uid, plan, tz, 'fieldwork');
+      const wfh = fieldworkOnPlan(fieldwork, m.uid, plan, tz, 'wfh');
       const c = computeDay(plan, shift?.punches ?? {}, {
         now,
         onLeave: leave,
         hasFieldwork: fw,
+        hasWfh: wfh,
         correctedActions: shift?.correctedActions ?? [],
       });
       rows.push({
@@ -90,6 +93,7 @@ export async function computeRange(orgId: string, tz: string, members: MemberDoc
         holidayName: plan.holidayName,
         onLeave: leave,
         hasFieldwork: fw,
+        hasWfh: wfh,
         approvedOvertimeMinutes: ot.get(key) ?? 0,
         unscheduled: plan.unscheduled && Object.keys(shift?.punches ?? {}).length > 0,
         workplaceNames: [...(places.get(key) ?? [])],
@@ -109,6 +113,7 @@ export function summarize(rows: DayRow[]) {
     inProgress: rows.filter((r) => r.status === 'in_progress').length,
     incomplete: rows.filter((r) => r.status === 'incomplete').length,
     fieldwork: rows.filter((r) => r.hasFieldwork).length,
+    wfh: rows.filter((r) => r.hasWfh).length,
     absent: rows.filter((r) => r.status === 'absent').length,
     onLeave: rows.filter((r) => r.status === 'leave').length,
     awaiting: rows.filter((r) => r.status === 'awaiting' || r.status === 'upcoming').length,

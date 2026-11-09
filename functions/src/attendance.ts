@@ -12,11 +12,13 @@ import {
   authorizedWorkplaces,
   datesAround,
   fieldworkTargets,
+  categoryOf,
   loadScheduleContext,
   planFor,
   shiftId,
   type ShiftDoc,
 } from './data';
+import { checkDevice, deviceSummary } from './device';
 
 export const clockSchema = z.object({
   requestId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
@@ -27,9 +29,15 @@ export const clockSchema = z.object({
       lng: z.number(),
       accuracy: z.number(),
       capturedAt: z.number().int(),
+      /** Device clock when the request was sent; lets age be measured on one clock. */
+      sentAt: z.number().int().optional(),
     })
     .nullable()
     .optional(),
+  /** Random per-browser identifier, used only to detect phones shared between accounts. */
+  deviceHint: z.string().regex(/^[A-Za-z0-9-]{8,64}$/).optional(),
+  /** WebAuthn assertion from the registered phone (required when phone verification applies). */
+  deviceAssertion: z.record(z.unknown()).nullable().optional(),
 });
 export type ClockInput = z.infer<typeof clockSchema>;
 
@@ -45,7 +53,8 @@ export interface ClockReceipt {
   workplaceId: string;
   distanceMeters: number | null;
   accuracyMeters: number;
-  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption';
+  validation: 'geofence' | 'fieldwork_location' | 'fieldwork_exemption' | 'wfh_location' | 'wfh_exemption';
+  deviceVerified?: boolean;
 }
 
 export interface ClockRejection {
@@ -81,6 +90,7 @@ function receiptFromEvent(id: string, d: FirebaseFirestore.DocumentData, replaye
     distanceMeters: d.distanceMeters,
     accuracyMeters: d.accuracyMeters,
     validation: d.validation,
+    deviceVerified: d.deviceVerified ?? false,
   };
 }
 
@@ -162,8 +172,13 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
     if (loc.accuracy > settings.maxAccuracyMeters) {
       throw new Rejection('LOCATION_INACCURATE', { accuracyMeters: Math.round(loc.accuracy), maxAccuracyMeters: settings.maxAccuracyMeters });
     }
-    if (loc.capturedAt > now + LIMITS.futureSkewSeconds * 1000) throw new Rejection('LOCATION_FROM_FUTURE');
-    const ageSeconds = Math.max(0, (now - loc.capturedAt) / 1000);
+    // Location age is measured on the device clock (sentAt - capturedAt) when
+    // available, so a phone whose clock is off does not cause false "stale"
+    // rejections. Without sentAt, the server clock is used.
+    const reference = loc.sentAt ?? now;
+    if (loc.capturedAt > reference + LIMITS.futureSkewSeconds * 1000) throw new Rejection('LOCATION_FROM_FUTURE');
+    if (loc.sentAt != null && Math.abs(now - loc.sentAt) > 24 * 3_600_000) throw new Rejection('LOCATION_FROM_FUTURE');
+    const ageSeconds = Math.max(0, (reference - loc.capturedAt) / 1000);
     if (ageSeconds > settings.maxLocationAgeSeconds) {
       throw new Rejection('LOCATION_STALE', { ageSeconds: Math.round(ageSeconds), maxLocationAgeSeconds: settings.maxLocationAgeSeconds });
     }
@@ -188,14 +203,20 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
     let workplaceName: string;
     let distanceMeters: number | null;
     if (match) {
-      validation = match.target.id.startsWith('fieldwork:') ? 'fieldwork_location' : 'geofence';
+      if (match.target.id.startsWith('fieldwork:')) {
+        const auth = fieldwork.find((f) => `fieldwork:${f.id}` === match.target.id);
+        validation = auth && categoryOf(auth) === 'wfh' ? 'wfh_location' : 'fieldwork_location';
+      } else {
+        validation = 'geofence';
+      }
       workplaceId = match.target.id;
       workplaceName = match.target.name;
       distanceMeters = Math.round(match.distanceMeters * 10) / 10;
     } else if (exemption) {
-      validation = 'fieldwork_exemption';
+      const wfh = categoryOf(exemption) === 'wfh';
+      validation = wfh ? 'wfh_exemption' : 'fieldwork_exemption';
       workplaceId = `fieldwork:${exemption.id}`;
-      workplaceName = `Fieldwork exemption: ${exemption.purpose}`.slice(0, 120);
+      workplaceName = `${wfh ? 'Work from home (exemption)' : 'Fieldwork exemption'}: ${exemption.purpose}`.slice(0, 120);
       distanceMeters = nearest ? Math.round(nearest.distanceMeters) : null;
     } else if (!targets.length) {
       throw new Rejection('NO_AUTHORIZED_WORKPLACE');
@@ -210,6 +231,10 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         `You are about ${Math.round(nearest!.distanceMeters)} m from ${nearest!.target.name}; the allowed radius is ${nearest!.target.radiusMeters} m.`,
       );
     }
+
+    // Registered-phone verification (passkey with the phone's own screen lock).
+    const device = await checkDevice(caller, input.deviceAssertion);
+    if (!device.ok) throw new Rejection(device.code);
 
     const shiftRefs = [dates.yesterday, dates.today, dates.tomorrow].map((d) => col(caller.orgId, 'shiftInstances').doc(shiftId(caller.uid, d)));
 
@@ -258,7 +283,9 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         workplaceName,
         distanceMeters,
         accuracyMeters: Math.round(loc.accuracy * 10) / 10,
-        locationAgeSeconds: Math.round(((official - loc.capturedAt) / 1000) * 10) / 10,
+        locationAgeSeconds: Math.round(ageSeconds * 10) / 10,
+        deviceVerified: device.required,
+        deviceCredentialId: device.credentialId,
         unscheduled: plan.unscheduled,
       };
       tx.create(eventRef, event);
@@ -272,6 +299,9 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         accuracyMeters: loc.accuracy,
         capturedAt: loc.capturedAt,
         receivedAt: official,
+        deviceSentAt: loc.sentAt ?? null,
+        deviceHint: input.deviceHint ?? null,
+        deviceClockSkewSeconds: loc.sentAt != null ? Math.round((loc.sentAt - official) / 1000) : null,
         workplaceId,
         distanceMeters,
       });
@@ -313,6 +343,7 @@ async function logAttempt(caller: Caller, input: ClockInput, e: Rejection) {
     message: e.message,
     details: e.details ?? null,
     location: input.location ?? null,
+    deviceHint: input.deviceHint ?? null,
     at: Date.now(),
   });
 }
@@ -367,6 +398,7 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
     workplaces: workplaces.map((w) => ({ id: w.id, name: w.name, address: w.address, lat: w.lat, lng: w.lng, radiusMeters: w.radiusMeters })),
     fieldwork: fieldwork.map((f) => ({
       id: f.id,
+      category: categoryOf(f),
       mode: f.mode,
       purpose: f.purpose,
       startAt: f.startAt,
@@ -376,6 +408,8 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
       lng: f.lng ?? null,
       radiusMeters: f.radiusMeters ?? null,
     })),
+    wfhEnabled: caller.org.settings.wfhEnabled,
+    device: await deviceSummary(caller),
     limits: { maxAccuracyMeters: caller.org.settings.maxAccuracyMeters, maxLocationAgeSeconds: caller.org.settings.maxLocationAgeSeconds },
   };
 }

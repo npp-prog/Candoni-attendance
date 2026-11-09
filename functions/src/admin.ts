@@ -78,7 +78,8 @@ export async function createEmployee(caller: Caller, raw: unknown) {
     if (code === 'auth/email-already-exists') throw new HttpsError('already-exists', 'An account with that email already exists.');
     throw e;
   }
-  const member: MemberDoc = {
+  const supervisorName = input.supervisorUid ? (await getMember(caller.orgId, input.supervisorUid)).fullName : null;
+  const member: MemberDoc & { supervisorName: string | null } = {
     uid: user.uid,
     orgId: caller.orgId,
     employeeNumber: input.employeeNumber,
@@ -88,6 +89,7 @@ export async function createEmployee(caller: Caller, raw: unknown) {
     position: input.position,
     classification: input.classification,
     supervisorUid: input.supervisorUid,
+    supervisorName,
     role: input.role as MemberDoc['role'],
     supervisedDepartmentIds: [],
     workplaceIds: input.workplaceIds,
@@ -123,7 +125,9 @@ export async function updateEmployee(caller: Caller, raw: unknown) {
     if (!dup.empty) throw new HttpsError('already-exists', 'That employee number is already in use.');
   }
   if (input.email !== target.email) await auth().updateUser(input.uid, { email: input.email });
-  const { uid, ...fields } = input;
+  const { uid, ...rest } = input;
+  const supervisorName = rest.supervisorUid ? (await getMember(caller.orgId, rest.supervisorUid)).fullName : null;
+  const fields = { ...rest, supervisorName };
   const batch = db.batch();
   batch.update(col(caller.orgId, 'members').doc(uid), { ...fields, searchName: fields.fullName.toLowerCase() });
   audit(batch, caller, { action: 'employee.update', targetType: 'member', targetId: uid, before: pick(target, Object.keys(fields)), after: fields });
@@ -366,6 +370,8 @@ const settingsSchema = z.object({
     minActionIntervalSeconds: z.number().int().min(10).max(3600),
     allowUnscheduledAttendance: z.boolean(),
     unscheduledMaxHours: z.number().int().min(1).max(24),
+    wfhEnabled: z.boolean().default(true),
+    deviceBinding: z.object({ mode: z.enum(['off', 'selected', 'all']), autoApproveFirstDevice: z.boolean() }).default({ mode: 'off', autoApproveFirstDevice: true }),
     approvalMode: z.enum(['supervisor_or_hr', 'hr_only']),
     privacyNoticeVersion: z.number().int().min(1),
     privacyNoticeText: text(8000).min(20),
@@ -386,6 +392,8 @@ export async function updateSettings(caller: Caller, raw: unknown) {
     if (input.settings.privacyNoticeVersion < (before?.settings?.privacyNoticeVersion ?? 1))
       throw new HttpsError('invalid-argument', 'The privacy notice version cannot go backwards.');
     tx.set(orgRef(caller.orgId), { ...input, updatedAt: Date.now() }, { merge: true });
+    // Public, non-sensitive branding so the sign-in screen can show the name and logo.
+    tx.set(db.collection('branding').doc(caller.orgId), { name: input.name, shortName: input.shortName, logoUrl: input.logoUrl });
     audit(tx, caller, { action: 'settings.update', targetType: 'organization', targetId: caller.orgId, before: before ? { ...before, logoUrl: before.logoUrl ? '[logo]' : null } : null, after: { ...input, logoUrl: input.logoUrl ? '[logo]' : null } });
   });
   return { ok: true };

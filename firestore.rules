@@ -60,6 +60,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public sign-in branding (organization name and logo only).
+    match /branding/{orgId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /organizations/{orgId} {
       allow read: if isActiveMember(orgId);
       allow write: if false;
@@ -133,6 +139,17 @@ service cloud.firestore {
       match /attendanceAttempts/{id} {
         allow read: if canReadSensitive(orgId, resource.data);
         allow write: if false;
+      }
+
+      // Registered phones (public keys only): the employee and HR/sysadmin.
+      match /devices/{id} {
+        allow read: if canReadSensitive(orgId, resource.data);
+        allow write: if false;
+      }
+
+      // Single-use WebAuthn challenges: server only.
+      match /webauthnChallenges/{id} {
+        allow read, write: if false;
       }
 
       match /auditLogs/{id} {

@@ -5,8 +5,10 @@ import { myToday } from './attendance';
 import { audit, db, enforceRateLimit, loadCaller, col, type Caller } from './context';
 import { dailyMonitor, dayDetail, myHistory, runReport } from './reports';
 import { cancelRequest, reviewRequest, submitRequest } from './requests';
+import * as device from './device';
+import type { CallMeta } from './device';
 
-type Handler = (caller: Caller, data: unknown) => Promise<unknown>;
+type Handler = (caller: Caller, data: unknown, meta: CallMeta) => Promise<unknown>;
 
 async function acceptPrivacy(caller: Caller, raw: unknown) {
   const { version } = z.object({ version: z.number().int().min(1) }).parse(raw);
@@ -21,10 +23,10 @@ async function acceptPrivacy(caller: Caller, raw: unknown) {
 /** Every operation performs its own role/scope checks on the server. */
 export const OPS: Record<string, Handler> = {
   'me.today': (c) => myToday(c),
-  'me.history': myHistory,
+  'me.history': (c, d) => myHistory(c, d),
   'me.acceptPrivacy': acceptPrivacy,
   'day.detail': dayDetail,
-  'request.submit': submitRequest,
+  'request.submit': (c, d) => submitRequest(c, d),
   'request.cancel': cancelRequest,
   'request.review': reviewRequest,
   'employee.create': admin.createEmployee,
@@ -45,20 +47,26 @@ export const OPS: Record<string, Handler> = {
   'adjustment.create': admin.createAdjustment,
   'settings.update': admin.updateSettings,
   'summaries.rebuild': admin.rebuildSummaries,
-  'monitor.daily': dailyMonitor,
-  'report.run': runReport,
+  'monitor.daily': (c, d) => dailyMonitor(c, d),
+  'report.run': (c, d) => runReport(c, d),
+  'device.registerOptions': device.registrationOptions,
+  'device.register': device.registerDevice,
+  'device.authOptions': device.authenticationOptions,
+  'device.approve': device.approveDevice,
+  'device.revoke': device.revokeDevice,
+  'employee.setDeviceBinding': device.setDeviceBindingRequired,
 };
 
-const READ_OPS = new Set(['me.today', 'me.history', 'day.detail', 'monitor.daily', 'report.run']);
+const READ_OPS = new Set(['me.today', 'me.history', 'day.detail', 'monitor.daily', 'report.run', 'device.authOptions']);
 
-export async function handleApi(uid: string | undefined, raw: unknown) {
+export async function handleApi(uid: string | undefined, raw: unknown, meta: CallMeta = {}) {
   const parsed = z.object({ op: z.string().max(64), data: z.unknown().optional() }).safeParse(raw);
   if (!parsed.success || !OPS[parsed.data.op]) throw new HttpsError('invalid-argument', 'Unknown operation.');
   const { op, data } = parsed.data;
   const caller = await loadCaller(uid);
   await enforceRateLimit(caller.orgId, `api_${READ_OPS.has(op) ? 'r' : 'w'}_${caller.uid}`, READ_OPS.has(op) ? 120 : 40, 60);
   try {
-    return await OPS[op](caller, data ?? {});
+    return await OPS[op](caller, data ?? {}, meta);
   } catch (e) {
     if (e instanceof z.ZodError) throw new HttpsError('invalid-argument', e.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
     throw e;

@@ -4,7 +4,6 @@ import { col, loadCaller } from '../src/context';
 import { at, BASE, clearRateLimits, loc, north, rid, seedOrg, type Fixture } from './helpers';
 
 let f: Fixture;
-const MON = '2026-03-02';
 
 beforeAll(async () => {
   f = await seedOrg(`att${Date.now().toString(36)}`);
@@ -72,6 +71,16 @@ describe('clockAttendance geofence and location validation', () => {
     expect(await clock('emp2', 'IN', now, loc(BASE, now, 10, -10 * 60_000))).toMatchObject({ ok: false, code: 'LOCATION_FROM_FUTURE' });
     expect(await clock('emp2', 'IN', now, null)).toMatchObject({ ok: false, code: 'LOCATION_MISSING' });
     expect(await clock('emp2', 'IN', now, { lat: 200, lng: 0, accuracy: 5, capturedAt: now })).toMatchObject({ ok: false, code: 'LOCATION_INVALID' });
+  });
+
+  it('measures location age on the device clock so a skewed phone clock is tolerated', async () => {
+    const now = at('2026-02-06', '07:56');
+    const skew = -7 * 60_000; // phone clock 7 minutes slow
+    const r = await clock('emp2', 'IN', now, { lat: BASE.lat, lng: BASE.lng, accuracy: 10, capturedAt: now + skew - 3000, sentAt: now + skew });
+    expect(r.ok).toBe(true);
+    // A genuinely old reading is still stale on the device's own clock.
+    const r2 = await clock('emp1', 'IN', now, { lat: BASE.lat, lng: BASE.lng, accuracy: 10, capturedAt: now + skew - 90_000, sentAt: now + skew });
+    expect(r2).toMatchObject({ ok: false, code: 'LOCATION_STALE' });
   });
 
   it('rejects employees without an authorized workplace', async () => {
@@ -196,6 +205,27 @@ describe('fieldwork authorization', () => {
     });
     const now = at('2026-02-20', '08:00');
     expect(await clock('emp2', 'IN', now, loc(north(2100), now))).toMatchObject({ ok: true, validation: 'fieldwork_location', workplaceName: 'Client HQ' });
+  });
+});
+
+describe('work from home authorization', () => {
+  it('accepts at the approved home location as WFH and rejects elsewhere', async () => {
+    const home = north(40_000);
+    await col(f.orgId, 'fieldworkAuthorizations').add({
+      memberId: f.uid('emp1'), departmentId: 'd1', active: true, requestId: 'wfh1', category: 'wfh', mode: 'alternate_location', purpose: 'Remote work',
+      locationName: 'Home', lat: home.lat, lng: home.lng, radiusMeters: 100, startAt: at('2026-02-24', '06:00'), endAt: at('2026-02-24', '20:00'),
+    });
+    const now = at('2026-02-24', '08:00');
+    expect(await clock('emp1', 'IN', now, loc(north(40_500), now))).toMatchObject({ ok: false, code: 'OUTSIDE_GEOFENCE' });
+    expect(await clock('emp1', 'IN', now, loc(north(40_050), now))).toMatchObject({ ok: true, validation: 'wfh_location', workplaceName: 'Work from home (Home)' });
+  });
+  it('labels a WFH exemption distinctly from fieldwork', async () => {
+    await col(f.orgId, 'fieldworkAuthorizations').add({
+      memberId: f.uid('emp1'), departmentId: 'd1', active: true, requestId: 'wfh2', category: 'wfh', mode: 'exemption', purpose: 'Remote work',
+      startAt: at('2026-02-25', '06:00'), endAt: at('2026-02-25', '20:00'),
+    });
+    const now = at('2026-02-25', '08:00');
+    expect(await clock('emp1', 'IN', now, loc(north(9000), now))).toMatchObject({ ok: true, validation: 'wfh_exemption' });
   });
 });
 

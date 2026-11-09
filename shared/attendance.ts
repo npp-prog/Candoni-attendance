@@ -191,6 +191,8 @@ export interface DayContext {
   now: number;
   onLeave: boolean;
   hasFieldwork: boolean;
+  /** Approved work-from-home covers this shift. */
+  hasWfh?: boolean;
   correctedActions?: AttendanceAction[];
   unscheduledMaxHours?: number;
 }
@@ -234,7 +236,11 @@ export function computeDay(plan: ShiftPlan, punchesRaw: Punches, ctx: DayContext
     if (!isWorkday) return result(plan.kind === 'holiday' ? 'holiday' : plan.kind === 'rest_day' ? 'rest_day' : 'no_schedule');
     if (ctx.onLeave) return result('leave');
     if (now(ctx) < plan.sessions[0].start) return result('upcoming');
-    if (now(ctx) <= plan.windowClose) return result(ctx.hasFieldwork ? 'fieldwork' : 'awaiting');
+    if (now(ctx) <= plan.windowClose) return result(ctx.hasWfh ? 'wfh' : ctx.hasFieldwork ? 'fieldwork' : 'awaiting');
+    if (ctx.hasWfh) {
+      exceptions.add('WFH_NO_PUNCH');
+      return result('wfh');
+    }
     if (ctx.hasFieldwork) {
       exceptions.add('FIELDWORK_NO_PUNCH');
       return result('fieldwork');

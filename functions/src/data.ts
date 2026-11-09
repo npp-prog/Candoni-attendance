@@ -103,7 +103,13 @@ export async function activeFieldwork(orgId: string, memberId: string, at: numbe
 export function fieldworkTargets(list: FieldworkAuth[]): GeofenceTarget[] {
   return list
     .filter((f) => f.mode === 'alternate_location' && f.lat != null && f.lng != null && f.radiusMeters)
-    .map((f) => ({ id: `fieldwork:${f.id}`, name: f.locationName || 'Approved fieldwork location', lat: f.lat!, lng: f.lng!, radiusMeters: f.radiusMeters! }));
+    .map((f) => ({
+      id: `fieldwork:${f.id}`,
+      name: f.category === 'wfh' ? `Work from home${f.locationName ? ` (${f.locationName})` : ''}` : f.locationName || 'Approved fieldwork location',
+      lat: f.lat!,
+      lng: f.lng!,
+      radiusMeters: f.radiusMeters!,
+    }));
 }
 
 export async function leavesFor(orgId: string, from: string, to: string, memberId?: string): Promise<LeaveDoc[]> {
@@ -124,9 +130,11 @@ export async function fieldworkInRange(orgId: string, fromMs: number, toMs: numb
   return snap.docs.map((d) => ({ ...(d.data() as FieldworkAuth), id: d.id })).filter((f) => f.active && f.startAt <= toMs);
 }
 
-export function fieldworkOnPlan(list: FieldworkAuth[], memberId: string, plan: ShiftPlan, tz: string): boolean {
+export const categoryOf = (f: Pick<FieldworkAuth, 'category'>) => f.category ?? 'fieldwork';
+
+export function fieldworkOnPlan(list: FieldworkAuth[], memberId: string, plan: ShiftPlan, tz: string, category: 'fieldwork' | 'wfh' = 'fieldwork'): boolean {
   return list.some((f) => {
-    if (f.memberId !== memberId) return false;
+    if (f.memberId !== memberId || categoryOf(f) !== category) return false;
     if (plan.sessions.length) return f.startAt < plan.sessions[plan.sessions.length - 1].end && f.endAt > plan.sessions[0].start;
     return localDate(f.startAt, tz) <= plan.workDate && localDate(f.endAt, tz) >= plan.workDate;
   });

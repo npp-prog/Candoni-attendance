@@ -37,6 +37,8 @@ beforeAll(async () => {
       await setDoc(doc(db, `organizations/${ORG}/correctionRequests/r${id}`), { memberId: m, departmentId: d, status: 'pending' });
     }
     await setDoc(doc(db, `organizations/${ORG}/auditLogs/a1`), { action: 'x' });
+    await setDoc(doc(db, `organizations/${ORG}/devices/dev1`), { memberId: 'emp1', departmentId: 'd1', status: 'active', publicKey: 'x' });
+    await setDoc(doc(db, `organizations/${ORG}/webauthnChallenges/emp1_auth`), { challenge: 'secret' });
   });
 });
 afterAll(async () => env?.cleanup());
@@ -100,6 +102,18 @@ describe('supervisor department scope', () => {
     await assertFails(getDocs(collection(db, p('correctionRequests'))));
     await assertFails(getDoc(doc(db, p('attendanceLocationEvidence/e2'))));
     await assertFails(getDoc(doc(db, p('auditLogs/a1'))));
+  });
+});
+
+describe('registered phones', () => {
+  it('lets the owner and HR read a phone record, nobody else, and never challenges', async () => {
+    await assertSucceeds(getDoc(doc(as('emp1'), p('devices/dev1'))));
+    await assertSucceeds(getDoc(doc(as('hr'), p('devices/dev1'))));
+    await assertFails(getDoc(doc(as('emp2'), p('devices/dev1'))));
+    await assertFails(getDoc(doc(as('sup1'), p('devices/dev1'))));
+    await assertFails(getDoc(doc(as('emp1'), p('webauthnChallenges/emp1_auth'))));
+    await assertFails(setDoc(doc(as('emp1'), p('devices/dev2')), { memberId: 'emp1', status: 'active' }));
+    await assertFails(updateDoc(doc(as('hr'), p('devices/dev1')), { status: 'revoked' }));
   });
 });
 

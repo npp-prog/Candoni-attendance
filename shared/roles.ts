@@ -14,6 +14,12 @@ export const isSupervisor = (role: Role | undefined | null) => role === 'supervi
 export const canAccessAdminConsole = (role: Role | undefined | null) =>
   role === 'supervisor' || role === 'hr' || role === 'sysadmin';
 
+/** Whether registered-phone verification applies to this member under the org setting. */
+export function deviceBindingApplies(settings: { deviceBinding?: { mode: 'off' | 'selected' | 'all' } }, member: { deviceBindingRequired?: boolean }): boolean {
+  const mode = settings.deviceBinding?.mode ?? 'off';
+  return mode === 'all' || (mode === 'selected' && member.deviceBindingRequired === true);
+}
+
 /** Whether `viewer` may see records belonging to a member in `departmentId`. */
 export function canViewDepartment(viewer: Pick<MemberDoc, 'role' | 'supervisedDepartmentIds'>, departmentId: string): boolean {
   if (isAttendanceAdmin(viewer.role)) return true;

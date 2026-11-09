@@ -18,26 +18,26 @@ export function localDateTimeToUtc(v: string, tz: string): number {
   return zonedToUtc(d, h * 60 + m, tz);
 }
 
+const remoteDetails = z.object({
+  startAt: localDateTime,
+  endAt: localDateTime,
+  mode: z.enum(['alternate_location', 'exemption']),
+  purpose: z.string().trim().min(3).max(200),
+  locationName: z.string().trim().max(120).optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  radiusMeters: z.number().int().min(10).max(5000).optional(),
+});
+
 export const submitSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('missing_punch'), workDate: dateStr, action, proposedAt: localDateTime, explanation: z.string().trim().min(5).max(1000) }),
   z.object({ type: z.literal('incorrect_punch'), workDate: dateStr, action, proposedAt: localDateTime, explanation: z.string().trim().min(5).max(1000) }),
   z.object({ type: z.literal('explanation'), workDate: dateStr, explanation: z.string().trim().min(5).max(1000) }),
   z.object({ type: z.literal('overtime'), workDate: dateStr, minutes: z.number().int().min(1).max(720), explanation: z.string().trim().min(5).max(1000) }),
-  z.object({
-    type: z.literal('fieldwork'),
-    workDate: dateStr,
-    explanation: z.string().trim().min(5).max(1000),
-    fieldwork: z.object({
-      startAt: localDateTime,
-      endAt: localDateTime,
-      mode: z.enum(['alternate_location', 'exemption']),
-      purpose: z.string().trim().min(3).max(200),
-      locationName: z.string().trim().max(120).optional(),
-      lat: z.number().min(-90).max(90).optional(),
-      lng: z.number().min(-180).max(180).optional(),
-      radiusMeters: z.number().int().min(10).max(5000).optional(),
-    }),
-  }),
+  z.object({ type: z.literal('fieldwork'), workDate: dateStr, explanation: z.string().trim().min(5).max(1000), fieldwork: remoteDetails }),
+  // Work from home uses the same structure: an approved window plus either the
+  // employee's home location (geofence) or an explicit location exemption.
+  z.object({ type: z.literal('wfh'), workDate: dateStr, explanation: z.string().trim().min(5).max(1000), fieldwork: remoteDetails }),
 ]);
 
 const MAX_PAST_DAYS = 60;
@@ -50,7 +50,8 @@ export async function submitRequest(caller: Caller, raw: unknown, now = Date.now
   const tz = caller.org.settings.timezone;
   const today = localDate(now, tz);
   if (input.workDate < addDays(today, -MAX_PAST_DAYS)) throw new HttpsError('invalid-argument', `Requests must be within ${MAX_PAST_DAYS} days.`);
-  const futureAllowed = input.type === 'fieldwork' ? MAX_FUTURE_DAYS : 0;
+  if (input.type === 'wfh' && !caller.org.settings.wfhEnabled) throw new HttpsError('failed-precondition', 'Work-from-home requests are not enabled for your organization.');
+  const futureAllowed = input.type === 'fieldwork' || input.type === 'wfh' ? MAX_FUTURE_DAYS : 0;
   if (input.workDate > addDays(today, futureAllowed)) throw new HttpsError('invalid-argument', 'That date is in the future.');
 
   const doc: Record<string, unknown> = {
@@ -91,15 +92,18 @@ export async function submitRequest(caller: Caller, raw: unknown, now = Date.now
     doc.currentAt = current[input.action] ?? null;
   }
   if (input.type === 'overtime') doc.minutes = input.minutes;
-  if (input.type === 'fieldwork') {
+  if (input.type === 'fieldwork' || input.type === 'wfh') {
     const f = input.fieldwork;
+    const label = input.type === 'wfh' ? 'Work-from-home' : 'Fieldwork';
+    const maxDays = input.type === 'wfh' ? 31 : 14;
     const startAt = localDateTimeToUtc(f.startAt, tz);
     const endAt = localDateTimeToUtc(f.endAt, tz);
-    if (endAt <= startAt) throw new HttpsError('invalid-argument', 'Fieldwork end must be after start.');
-    if (endAt - startAt > 14 * 86_400_000) throw new HttpsError('invalid-argument', 'Fieldwork windows are limited to 14 days per request.');
+    if (endAt <= startAt) throw new HttpsError('invalid-argument', `${label} end must be after start.`);
+    if (endAt - startAt > maxDays * 86_400_000) throw new HttpsError('invalid-argument', `${label} windows are limited to ${maxDays} days per request.`);
     if (f.mode === 'alternate_location' && (f.lat == null || f.lng == null || !f.radiusMeters || !f.locationName))
-      throw new HttpsError('invalid-argument', 'Alternate locations need a name, coordinates, and radius.');
+      throw new HttpsError('invalid-argument', input.type === 'wfh' ? 'Pin your home location (coordinates and radius).' : 'Alternate locations need a name, coordinates, and radius.');
     doc.fieldwork = {
+      category: input.type,
       startAt,
       endAt,
       mode: f.mode,
@@ -233,10 +237,11 @@ export async function reviewRequest(caller: Caller, raw: unknown) {
         result.adjustmentId = await applyAdjustment(tx, caller, member, workDate, req.action, req.proposedAt, `Request ${snap.id}: ${req.explanation}`, snap.id, () =>
           planFor(sctx, member.uid, workDate),
         );
-      } else if (type === 'fieldwork') {
+      } else if (type === 'fieldwork' || type === 'wfh') {
         const fwRef = col(caller.orgId, 'fieldworkAuthorizations').doc();
         tx.create(fwRef, {
           ...req.fieldwork,
+          category: type,
           orgId: caller.orgId,
           memberId: req.memberId,
           memberName: req.memberName,
