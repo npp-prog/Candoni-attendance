@@ -100,6 +100,33 @@ describe('registered phone requirement', () => {
   });
 });
 
+describe('registered phone is never silently bypassed', () => {
+  it('requires the registered phone once registered, even without the pilot flag', async () => {
+    // sup2 is not flagged for the pilot but registers a phone.
+    expect(await register('sup2', new SoftAuthenticator(ORIGIN))).toMatchObject({ status: 'active' });
+    const yard = { lat: BASE.lat + 0.05, lng: BASE.lng };
+    const now = at('2026-03-11', '08:00');
+    const r = await processClock(f.uid('sup2'), { requestId: rid(), action: 'IN', location: loc(yard, now), deviceHint: 'some-other-phone-01' }, () => now);
+    expect(r).toMatchObject({ ok: false, code: 'DEVICE_VERIFICATION_REQUIRED' });
+  });
+
+  it('reports clock actions from another phone (when checks were off) and mixed phones in one shift', async () => {
+    // The test uses fixed March dates; date the phone registration before them.
+    const phones = await col(f.orgId, 'devices').where('memberId', '==', f.uid('sup2')).get();
+    for (const d of phones.docs) await d.ref.update({ createdAt: at('2026-03-01', '08:00'), approvedAt: at('2026-03-01', '08:00') });
+    await orgRef(f.orgId).update({ 'settings.deviceBinding.mode': 'off' });
+    const yard = { lat: BASE.lat + 0.05, lng: BASE.lng };
+    const tin = at('2026-03-12', '08:00');
+    const tout = at('2026-03-12', '17:05');
+    expect((await processClock(f.uid('sup2'), { requestId: rid(), action: 'IN', location: loc(yard, tin), deviceHint: 'hint-sup2-0001' }, () => tin)).ok).toBe(true);
+    expect((await processClock(f.uid('sup2'), { requestId: rid(), action: 'OUT', location: loc(yard, tout), deviceHint: 'borrowed-phone-01' }, () => tout)).ok).toBe(true);
+    await orgRef(f.orgId).update({ 'settings.deviceBinding.mode': 'selected' });
+    const r = (await api('hr', 'report.run', { type: 'device_anomalies', from: '2026-03-12', to: '2026-03-12' })) as { rows: { kind: string; employees: string[] }[] };
+    expect(r.rows.find((x) => x.kind === 'unregistered_phone')?.employees).toEqual(['sup2 person']);
+    expect(r.rows.find((x) => x.kind === 'different_phones_same_shift')?.employees).toEqual(['sup2 person']);
+  });
+});
+
 describe('suspicious-activity report', () => {
   it('flags one phone used for several employees, HR only', async () => {
     const now = at('2026-03-10', '08:00');

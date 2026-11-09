@@ -120,6 +120,9 @@ export function MemberDevicesCard({ m, onToast }: { m: MemberRow; onToast: (s: s
           Require a registered phone for this employee (pilot)
         </label>
       )}
+      {mode !== 'off' && list.some((d) => d.status === 'active') && (
+        <p className="mb-2 text-sm font-medium text-emerald-800">✓ Clock-ins require this employee’s registered phone (applies to anyone with a registered phone).</p>
+      )}
       {actions.error && <Alert tone="danger" className="mb-2">{actions.error}</Alert>}
       {items && list.length === 0 && <p className="text-sm text-slate-600">No phone registered yet. The employee registers from Profile → Registered phone.</p>}
       <ul className="flex flex-col gap-2">

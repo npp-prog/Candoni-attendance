@@ -301,6 +301,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
         receivedAt: official,
         deviceSentAt: loc.sentAt ?? null,
         deviceHint: input.deviceHint ?? null,
+        deviceVerified: device.required,
         deviceClockSkewSeconds: loc.sentAt != null ? Math.round((loc.sentAt - official) / 1000) : null,
         workplaceId,
         distanceMeters,
