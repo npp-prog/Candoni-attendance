@@ -139,3 +139,5 @@ Limitations: older browsers or strict privacy/ad-blocking setups may fail reCAPT
   Then redeploy: `npx firebase deploy --project prod --only functions --force`.
 - If the organization enforces **Domain restricted sharing** (`iam.allowedPolicyMemberDomains`), the deploy cannot make the callable functions publicly invokable (`allUsers`), and the web app will get permission errors. Allow an exception for this project or ask your Workspace admin.
 - Bootstrap command used: `node scripts/bootstrap-admin.mjs --project candoni-attendance-813a0 --database candoni-attendance --org candoni ...`
+
+- **Custom domain:** the app is served at `https://clockup.mgocandoni.com` (Netlify custom domain). It is listed first in `WEBAUTHN_ORIGINS` (functions/.env.candoni-attendance-813a0) so phones register to it. Add it to Firebase **Authentication → Settings → Authorized domains** as well.
