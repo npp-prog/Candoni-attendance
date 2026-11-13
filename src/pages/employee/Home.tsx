@@ -172,7 +172,10 @@ export default function Home() {
 
   const next = data?.next;
   const plan = data?.plan;
-  const seq = plan ? actionSequence(plan.unscheduled ? 'single' : plan.pattern) : [];
+  const baseSeq = plan ? actionSequence(plan.unscheduled ? 'single' : plan.pattern) : [];
+  // Overtime In/Out appear once overtime is offered or recorded.
+  const showOt = !!data && (data.punches.OT_IN != null || next?.action === 'OT_IN' || next?.action === 'OT_OUT');
+  const seq = showOt ? [...baseSeq, 'OT_IN' as const, 'OT_OUT' as const] : baseSeq;
   const busy = ['locating', 'submitting', 'explain', 'review'].includes(phase.k);
   const phoneBlocked = !!data && data.device.required && data.device.status !== 'active';
   const canAct = online && !!next?.action && next.code === 'OK' && phase.k !== 'uncertain' && !phoneBlocked;

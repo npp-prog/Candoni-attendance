@@ -155,7 +155,7 @@ function AdjustForm({ memberId, workDate, tz, onClose, onDone }: { memberId: str
         <Field label="Action">
           {(id) => (
             <Select id={id} value={action} onChange={(e) => setAction(e.target.value as AttendanceAction)}>
-              {(['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT'] as AttendanceAction[]).map((a) => (
+              {(['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT', 'OT_IN', 'OT_OUT'] as AttendanceAction[]).map((a) => (
                 <option key={a} value={a}>
                   {ACTION_LABELS[a]}
                 </option>

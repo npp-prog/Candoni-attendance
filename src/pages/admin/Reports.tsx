@@ -24,7 +24,7 @@ const TYPES: Record<ReportType, string> = {
   fieldwork: 'Fieldwork & work-from-home attendance',
   device_anomalies: 'Suspicious activity (shared phones)',
 };
-type Row = MonitorRow & { approvedOvertimeMinutes: number; holidayName: string | null; unscheduled: boolean };
+type Row = MonitorRow & { approvedOvertimeMinutes: number; overtimeStatus: 'none' | 'pending' | 'approved' | 'rejected'; holidayName: string | null; unscheduled: boolean };
 
 export default function Reports() {
   const { tz, member, departments, branding } = useSession() as ReturnType<typeof useSession>;
@@ -194,7 +194,7 @@ function ReportView({ result, tz, departments, orgName }: { result: any; tz: str
       <Card>
         {header}
         <ResponsiveTable
-          head={[first, 'Expected', 'Present', 'Absent', 'Incomplete', 'Leave', 'Late (times)', 'Late', 'Undertime', 'Worked', 'Potential OT', 'Approved OT', 'Corrected days']}
+          head={[first, 'Expected', 'Present', 'Absent', 'Incomplete', 'Leave', 'Late (times)', 'Late', 'Undertime', 'Worked', 'Potential OT', 'Clocked OT', 'Approved OT', 'Corrected days']}
           rows={paged.slice.map((r) => [
             t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`,
             r.expectedDays,
@@ -207,6 +207,7 @@ function ReportView({ result, tz, departments, orgName }: { result: any; tz: str
             formatMinutes(r.undertimeMinutes),
             formatMinutes(r.workedMinutes),
             formatMinutes(r.overtimeCandidateMinutes),
+            formatMinutes(r.clockedOvertimeMinutes ?? 0),
             formatMinutes(r.approvedOvertimeMinutes),
             r.correctedDays,
           ])}
@@ -349,7 +350,8 @@ function Dtr({ result, tz, orgName }: { result: any; tz: string; orgName: string
   const rows: Row[] = result.rows;
   const m = result.member;
   const split = rows.some((r) => r.punches.AM_IN || r.punches.PM_IN || r.punches.AM_OUT || r.punches.PM_OUT);
-  const cols: AttendanceAction[] = split ? ['AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT'] : ['IN', 'OUT'];
+  const hasOt = rows.some((r) => r.punches.OT_IN != null);
+  const cols: AttendanceAction[] = [...(split ? (['AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT'] as AttendanceAction[]) : (['IN', 'OUT'] as AttendanceAction[])), ...(hasOt ? (['OT_IN', 'OT_OUT'] as AttendanceAction[]) : [])];
   const totals = useMemo(() => rows.reduce((a, r) => ({ late: a.late + r.lateMinutes, under: a.under + r.undertimeMinutes, worked: a.worked + r.workedMinutes }), { late: 0, under: 0, worked: 0 }), [rows]);
   return (
     <Card className="print-page overflow-x-auto">
@@ -428,11 +430,11 @@ function exportCsv(result: any, tz: string, departments: Record<string, string>,
     downloadCsv(
       fname,
       toCsv(
-        ['Work date', 'Employee no.', 'Name', 'Department', 'Schedule', 'IN', 'OUT', 'AM IN', 'AM OUT', 'PM IN', 'PM OUT', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Approved OT min', 'Status', 'Missing', 'Corrected', 'Workplace'],
+        ['Work date', 'Employee no.', 'Name', 'Department', 'Schedule', 'IN', 'OUT', 'AM IN', 'AM OUT', 'PM IN', 'PM OUT', 'OT IN', 'OT OUT', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Clocked OT min', 'OT request', 'Approved OT min', 'Status', 'Missing', 'Corrected', 'Workplace'],
         rows.map((r) => [
           r.workDate, r.employeeNumber, r.fullName, departments[r.departmentId] ?? r.departmentId, r.scheduleName ?? '',
-          p(r, 'IN'), p(r, 'OUT'), p(r, 'AM_IN'), p(r, 'AM_OUT'), p(r, 'PM_IN'), p(r, 'PM_OUT'),
-          r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.approvedOvertimeMinutes,
+          p(r, 'IN'), p(r, 'OUT'), p(r, 'AM_IN'), p(r, 'AM_OUT'), p(r, 'PM_IN'), p(r, 'PM_OUT'), p(r, 'OT_IN'), p(r, 'OT_OUT'),
+          r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.otWorkedMinutes ?? 0, r.overtimeStatus ?? 'none', r.approvedOvertimeMinutes,
           STATUS_LABELS[r.status as DayStatus], r.missingActions.join(' '), r.correctedActions.length ? `Yes (${r.correctedActions.join(' ')})` : 'No', r.workplaceNames.join('; '),
         ]),
       ),
@@ -441,8 +443,8 @@ function exportCsv(result: any, tz: string, departments: Record<string, string>,
     downloadCsv(
       fname,
       toCsv(
-        [t === 'department_summary' ? 'Department' : 'Employee', 'Expected days', 'Present', 'Absent', 'Incomplete', 'Leave', 'Fieldwork', 'WFH', 'Late count', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Approved OT min', 'Corrected days'],
-        rows.map((r) => [t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`, r.expectedDays, r.presentDays, r.absentDays, r.incompleteDays, r.leaveDays, r.fieldworkDays, r.wfhDays ?? 0, r.lateCount, r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.approvedOvertimeMinutes, r.correctedDays]),
+        [t === 'department_summary' ? 'Department' : 'Employee', 'Expected days', 'Present', 'Absent', 'Incomplete', 'Leave', 'Fieldwork', 'WFH', 'Late count', 'Late min', 'Undertime min', 'Worked min', 'Potential OT min', 'Clocked OT min', 'Approved OT min', 'Corrected days'],
+        rows.map((r) => [t === 'department_summary' ? r.departmentName : `${r.fullName} (${r.employeeNumber})`, r.expectedDays, r.presentDays, r.absentDays, r.incompleteDays, r.leaveDays, r.fieldworkDays, r.wfhDays ?? 0, r.lateCount, r.lateMinutes, r.undertimeMinutes, r.workedMinutes, r.overtimeCandidateMinutes, r.clockedOvertimeMinutes ?? 0, r.approvedOvertimeMinutes, r.correctedDays]),
       ),
     );
   } else if (t === 'device_anomalies') {

@@ -226,3 +226,37 @@ describe('work from home', () => {
     expect(after.exceptions).not.toContain('ABSENT');
   });
 });
+
+describe('overtime clock', () => {
+  const MONDAY = '2026-03-02';
+  const done = { [MONDAY]: { AM_IN: at(MONDAY, '07:55'), AM_OUT: at(MONDAY, '12:00'), PM_IN: at(MONDAY, '12:55'), PM_OUT: at(MONDAY, '17:00') } };
+  const nextWithOt = (now: number, punches: Record<string, Punches>, requested: boolean) =>
+    determineNextAction({ now, plans: plansAround(split, MONDAY), punches, allowUnscheduled: true, unscheduledMaxHours: 16, minActionIntervalSeconds: 60, overtimeRequested: requested ? { [MONDAY]: true } : {} });
+
+  it('offers Overtime In only after PM Out and only with a filed overtime request', () => {
+    expect(nextWithOt(at(MONDAY, '17:05'), done, false)).toMatchObject({ code: 'SHIFT_COMPLETE', action: null });
+    expect(nextWithOt(at(MONDAY, '17:05'), done, false).message).toMatch(/file an overtime request/);
+    expect(nextWithOt(at(MONDAY, '17:05'), done, true)).toMatchObject({ code: 'OK', action: 'OT_IN' });
+    // Not before the regular day is finished.
+    expect(nextWithOt(at(MONDAY, '16:00'), { [MONDAY]: { AM_IN: 1, AM_OUT: 2, PM_IN: at(MONDAY, '12:55') } }, true).action).toBe('PM_OUT');
+  });
+
+  it('keeps Overtime Out available past the regular cutoff, then reports completion', () => {
+    const withOtIn = { [MONDAY]: { ...done[MONDAY], OT_IN: at(MONDAY, '17:10') } };
+    expect(nextWithOt(at(MONDAY, '23:30'), withOtIn, true)).toMatchObject({ code: 'OK', action: 'OT_OUT', workDate: MONDAY });
+    const finished = { [MONDAY]: { ...withOtIn[MONDAY], OT_OUT: at(MONDAY, '23:40') } };
+    const r = nextWithOt(at(MONDAY, '23:50'), finished, true);
+    expect(r.code).not.toBe('OK');
+  });
+
+  it('counts clocked overtime separately and flags a missing Overtime Out', () => {
+    const sp = plan(split);
+    const r = computeDay(sp, { ...done[MONDAY], OT_IN: at(MONDAY, '17:10'), OT_OUT: at(MONDAY, '19:40') }, ctx(at(MONDAY, '23:00')));
+    expect(r.otWorkedMinutes).toBe(150);
+    expect(r.status).toBe('completed');
+    expect(computeDay(sp, { ...done[MONDAY], OT_IN: at(MONDAY, '17:10') }, ctx(at(MONDAY, '20:00'))).status).toBe('in_progress');
+    const late = computeDay(sp, { ...done[MONDAY], OT_IN: at(MONDAY, '17:10') }, ctx(at(MONDAY, '17:10', 1)));
+    expect(late.status).toBe('incomplete');
+    expect(late.missingActions).toContain('OT_OUT');
+  });
+});

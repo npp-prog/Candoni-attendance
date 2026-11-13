@@ -8,7 +8,7 @@ import { useSession } from '../../context/AuthContext';
 import { callApi } from '../../lib/api';
 import { fmtDateShort, fmtPunch, formatMinutes } from '../../lib/format';
 
-type Row = DayComputation & { scheduleName: string | null; holidayName: string | null; approvedOvertimeMinutes: number; workplaceNames: string[] };
+type Row = DayComputation & { scheduleName: string | null; holidayName: string | null; approvedOvertimeMinutes: number; overtimeStatus: 'none' | 'pending' | 'approved' | 'rejected'; workplaceNames: string[] };
 
 export default function History() {
   const { tz, user } = useSession();
@@ -46,7 +46,7 @@ export default function History() {
                     </div>
                     {Object.keys(r.punches).length > 0 && (
                       <p className="tabular mt-1 text-sm text-slate-700">
-                        {actionSequence(r.punches.AM_IN || r.punches.PM_IN ? 'split' : 'single')
+                        {[...actionSequence(r.punches.AM_IN || r.punches.PM_IN ? 'split' : 'single'), ...(r.punches.OT_IN != null ? (['OT_IN', 'OT_OUT'] as const) : [])]
                           .map((a) => `${ACTION_LABELS[a]} ${fmtPunch(r.punches[a], r.workDate, tz)}`)
                           .join(' · ')}
                       </p>
@@ -58,7 +58,12 @@ export default function History() {
                       {r.missingActions.length > 0 && <Badge tone="danger">Missing {r.missingActions.map((a) => ACTION_LABELS[a]).join(', ')}</Badge>}
                       {r.correctedActions.length > 0 && <Badge tone="info" icon="✎">Corrected</Badge>}
                       {r.overtimeCandidateMinutes > 0 && <Badge tone="neutral" icon="+">Potential OT {formatMinutes(r.overtimeCandidateMinutes)}</Badge>}
-                      {r.approvedOvertimeMinutes > 0 && <Badge tone="success">Approved OT {formatMinutes(r.approvedOvertimeMinutes)}</Badge>}
+                      {r.otWorkedMinutes > 0 && (
+                        <Badge tone={r.overtimeStatus === 'approved' ? 'success' : r.overtimeStatus === 'rejected' ? 'danger' : 'warning'} icon="⏱">
+                          Overtime {formatMinutes(r.otWorkedMinutes)} · {r.overtimeStatus === 'approved' ? `approved ${formatMinutes(r.approvedOvertimeMinutes)}` : r.overtimeStatus === 'rejected' ? 'not approved' : 'pending approval'}
+                        </Badge>
+                      )}
+                      {r.otWorkedMinutes === 0 && r.approvedOvertimeMinutes > 0 && <Badge tone="success">Approved OT {formatMinutes(r.approvedOvertimeMinutes)}</Badge>}
                     </div>
                   </Card>
                 </button>

@@ -175,5 +175,6 @@ export function punchText(r: Pick<MonitorRow, 'punches' | 'workDate'>, tz: strin
   const keys = Object.keys(r.punches);
   if (!keys.length) return '—';
   const seq = actionSequence(r.punches.AM_IN || r.punches.PM_IN || r.punches.AM_OUT || r.punches.PM_OUT ? 'split' : 'single');
-  return seq.map((a) => fmtPunch(r.punches[a], r.workDate, tz)).join(' / ');
+  const text = seq.map((a) => fmtPunch(r.punches[a], r.workDate, tz)).join(' / ');
+  return r.punches.OT_IN != null ? `${text} · OT ${fmtPunch(r.punches.OT_IN, r.workDate, tz)}–${fmtPunch(r.punches.OT_OUT, r.workDate, tz)}` : text;
 }
