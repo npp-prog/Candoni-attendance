@@ -260,3 +260,48 @@ describe('overtime clock', () => {
     expect(late.missingActions).toContain('OT_OUT');
   });
 });
+
+describe('overtime without regular attendance', () => {
+  const MONDAY = '2026-03-02';
+  const SUNDAY = '2026-03-01';
+  const run = (today: string, now: number, punches: Record<string, Punches>, requested: string[]) =>
+    determineNextAction({ now, plans: plansAround(split, today), punches, allowUnscheduled: true, unscheduledMaxHours: 16, minActionIntervalSeconds: 60, overtimeRequested: Object.fromEntries(requested.map((d) => [d, true])) });
+
+  it('offers Overtime In as an alternative before the regular clock-in', () => {
+    const r = run(MONDAY, at(MONDAY, '06:30'), {}, [MONDAY]);
+    expect(r).toMatchObject({ code: 'OK', action: 'AM_IN', altActions: ['OT_IN'] });
+    expect(run(MONDAY, at(MONDAY, '06:30'), {}, []).altActions).toBeUndefined();
+  });
+
+  it('never offers Overtime In during an open regular session', () => {
+    const r = run(MONDAY, at(MONDAY, '10:00'), { [MONDAY]: { AM_IN: at(MONDAY, '08:00') } }, [MONDAY]);
+    expect(r.action).toBe('AM_OUT');
+    expect(r.altActions).toBeUndefined();
+  });
+
+  it('makes Overtime In the main action on a rest day or after the regular window closed', () => {
+    const rest = run(SUNDAY, at(SUNDAY, '09:00'), {}, [SUNDAY]);
+    expect(rest).toMatchObject({ code: 'OK', action: 'OT_IN', workDate: SUNDAY });
+    const evening = run(MONDAY, at(MONDAY, '22:00'), {}, [MONDAY]);
+    expect(evening).toMatchObject({ code: 'OK', action: 'OT_IN', workDate: MONDAY });
+    // Without a request, a closed window still says closed.
+    expect(run(MONDAY, at(MONDAY, '22:00'), {}, []).code).toBe('SHIFT_CLOSED');
+  });
+
+  it('after early overtime, the regular day continues normally', () => {
+    const p = { [MONDAY]: { OT_IN: at(MONDAY, '06:10'), OT_OUT: at(MONDAY, '07:50') } };
+    const r = run(MONDAY, at(MONDAY, '07:55'), p, [MONDAY]);
+    expect(r).toMatchObject({ code: 'OK', action: 'AM_IN' });
+    expect(r.altActions).toBeUndefined(); // only one overtime period per day
+  });
+
+  it('keeps the regular status and counts the overtime on overtime-only days', () => {
+    const sp = plan(split);
+    const absentWithOt = computeDay(sp, { OT_IN: at(MONDAY, '18:00'), OT_OUT: at(MONDAY, '20:00') }, ctx(at(MONDAY, '23:00')));
+    expect(absentWithOt.status).toBe('absent');
+    expect(absentWithOt.otWorkedMinutes).toBe(120);
+    const restOt = computeDay(plan(split, SUNDAY), { OT_IN: at(SUNDAY, '09:00'), OT_OUT: at(SUNDAY, '12:30') }, ctx(at(SUNDAY, '23:00')));
+    expect(restOt.status).toBe('rest_day');
+    expect(restOt.otWorkedMinutes).toBe(210);
+  });
+});

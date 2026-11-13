@@ -174,7 +174,7 @@ export default function Home() {
   const plan = data?.plan;
   const baseSeq = plan ? actionSequence(plan.unscheduled ? 'single' : plan.pattern) : [];
   // Overtime In/Out appear once overtime is offered or recorded.
-  const showOt = !!data && (data.punches.OT_IN != null || next?.action === 'OT_IN' || next?.action === 'OT_OUT');
+  const showOt = !!data && (data.punches.OT_IN != null || next?.action === 'OT_IN' || next?.action === 'OT_OUT' || !!next?.altActions?.includes('OT_IN'));
   const seq = showOt ? [...baseSeq, 'OT_IN' as const, 'OT_OUT' as const] : baseSeq;
   const busy = ['locating', 'submitting', 'explain', 'review'].includes(phase.k);
   const phoneBlocked = !!data && data.device.required && data.device.status !== 'active';
@@ -245,6 +245,14 @@ export default function Home() {
             >
               {next.action ? ACTION_LABELS[next.action] : 'No action available'}
             </Button>
+            {(next.altActions ?? []).map((alt) => (
+              <Button key={alt} variant="secondary" className="min-h-14 w-full rounded-2xl text-lg" disabled={!canAct || busy} onClick={() => start(alt)}>
+                {ACTION_LABELS[alt]} instead
+              </Button>
+            ))}
+            {(next.altActions ?? []).includes('OT_IN') && (
+              <p className="text-center text-xs text-slate-600">You have a filed overtime request for this day. Use “Overtime In” only for overtime outside your regular hours.</p>
+            )}
             <p id="action-reason" className="text-center text-sm text-slate-700">
               {phoneBlocked && (data.device.status === 'pending' ? 'Your registered phone is waiting for HR approval.' : 'Register this phone below before clocking in.')}
               {!phoneBlocked && next.code === 'OK' && (deviceRequired ? 'You will confirm with your phone’s fingerprint, face or PIN. Location is checked only when you tap.' : 'Your location is checked only when you tap the button.')}

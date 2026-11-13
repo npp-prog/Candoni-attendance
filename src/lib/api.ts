@@ -92,7 +92,7 @@ export interface TodayData {
   timezone: string;
   today: string;
   scheduleName: string | null;
-  next: { code: string; action: AttendanceAction | null; workDate: string; message: string; availableAt: number | null };
+  next: { code: string; action: AttendanceAction | null; altActions?: AttendanceAction[]; workDate: string; message: string; availableAt: number | null };
   plan: ShiftPlan;
   punches: Punches;
   correctedActions: AttendanceAction[];
