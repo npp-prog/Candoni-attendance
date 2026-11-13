@@ -274,3 +274,28 @@ describe('overtime clock', () => {
     expect(await report()).toMatchObject({ overtimeStatus: 'approved', approvedOvertimeMinutes: 120 });
   });
 });
+
+describe('overtime independent of regular attendance', () => {
+  const DAY = '2026-03-16';
+  it('allows early Overtime In/Out before the regular clock-in, then the regular day, but not Overtime In mid-session', async () => {
+    await col(f.orgId, 'correctionRequests').add({
+      orgId: f.orgId, memberId: f.uid('emp2'), memberName: 'emp2 person', employeeNumber: 'x', departmentId: 'd1', type: 'overtime', workDate: DAY,
+      explanation: 'Early inventory', minutes: 90, status: 'pending', createdAt: Date.now(), reviewerUid: null, reviewerName: null, reviewerRemarks: null, reviewedAt: null, action: null, proposedAt: null, fieldwork: null,
+    });
+    const t1 = at(DAY, '06:15');
+    expect(await clock('emp2', 'OT_IN', t1, loc(BASE, t1))).toMatchObject({ ok: true, action: 'OT_IN', workDate: DAY });
+    const t2 = at(DAY, '07:45');
+    expect(await clock('emp2', 'OT_OUT', t2, loc(BASE, t2))).toMatchObject({ ok: true, action: 'OT_OUT' });
+    const t3 = at(DAY, '08:00');
+    expect(await clock('emp2', 'IN', t3, loc(BASE, t3))).toMatchObject({ ok: true, action: 'IN' });
+    // A second overtime period, or one during the open regular session, is refused.
+    const t4 = at(DAY, '09:00');
+    expect(await clock('emp2', 'OT_IN', t4, loc(BASE, t4))).toMatchObject({ ok: false, code: 'ACTION_NOT_ALLOWED' });
+  });
+
+  it('refuses Overtime In without a filed request', async () => {
+    const d = '2026-03-17';
+    const t = at(d, '06:15');
+    expect(await clock('emp2', 'OT_IN', t, loc(BASE, t))).toMatchObject({ ok: false, code: 'ACTION_NOT_ALLOWED' });
+  });
+});

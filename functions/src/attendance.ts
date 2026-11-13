@@ -278,7 +278,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
       if (next.code !== 'OK') {
         throw new Rejection(next.code, next.availableAt ? { availableAt: next.availableAt } : undefined, next.message);
       }
-      if (next.action !== input.action) {
+      if (next.action !== input.action && !(next.altActions ?? []).includes(input.action)) {
         throw new Rejection('ACTION_NOT_ALLOWED', { expectedAction: next.action }, `The next valid action is ${next.action}. Refresh and try again.`);
       }
       const shiftIdx = [dates.yesterday, dates.today, dates.tomorrow].indexOf(next.workDate);
@@ -411,6 +411,7 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
     next: {
       code: next.code,
       action: next.action,
+      altActions: next.altActions ?? [],
       workDate: next.workDate,
       message: next.message,
       availableAt: next.availableAt ?? null,

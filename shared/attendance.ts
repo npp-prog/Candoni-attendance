@@ -59,6 +59,8 @@ export type NextActionCode =
 export interface NextActionResult {
   code: NextActionCode;
   action: AttendanceAction | null;
+  /** Other valid actions the employee may choose instead (e.g. Overtime In before the regular clock-in). */
+  altActions?: AttendanceAction[];
   plan: ShiftPlan;
   workDate: string;
   message: string;
@@ -109,6 +111,14 @@ export function determineNextAction(input: NextActionInput): NextActionResult {
   };
   const ok = (plan: ShiftPlan, action: AttendanceAction): NextActionResult =>
     withInterval({ code: 'OK', action, plan, workDate: plan.workDate, message: 'Ready.' });
+  // Overtime is independent of the regular day but needs a filed (pending/approved) request,
+  // and never overlaps an open regular session or another overtime period.
+  const otAvailable = (plan: ShiftPlan) => !!input.overtimeRequested?.[plan.workDate] && punchesFor(plan).OT_IN == null;
+  const okRegular = (plan: ShiftPlan, action: AttendanceAction): NextActionResult => {
+    const r = ok(plan, action);
+    if (r.code === 'OK' && !plan.unscheduled && ['IN', 'AM_IN', 'PM_IN'].includes(action) && otAvailable(plan)) r.altActions = ['OT_IN'];
+    return r;
+  };
 
   const otMaxMs = (input.overtimeMaxHours ?? DEFAULT_OVERTIME_MAX_HOURS) * 3_600_000;
   // (a0) Overtime in progress: Overtime Out stays available after the regular cutoff.
@@ -127,23 +137,24 @@ export function determineNextAction(input: NextActionInput): NextActionResult {
     }
     if (now >= plan.windowOpen && now <= plan.windowClose) {
       const next = nextInSequence(plan, p, now);
-      if (next) return ok(plan, next);
+      if (next) return okRegular(plan, next);
       // Regular day finished: overtime only with a filed overtime request.
-      if (p.OT_IN == null && input.overtimeRequested?.[plan.workDate]) return ok(plan, 'OT_IN');
+      if (otAvailable(plan)) return ok(plan, 'OT_IN');
     }
   }
 
   // (b) A scheduled shift whose window is open and has no punches yet.
   const y = plans.yesterday;
   if (y.kind === 'workday' && !hasPunches(punchesFor(y)) && now >= y.windowOpen && now < y.sessions[y.sessions.length - 1].end) {
-    return ok(y, nextInSequence(y, {}, now)!);
+    return okRegular(y, nextInSequence(y, {}, now)!);
   }
   const t = plans.today;
   const tp = punchesFor(t);
   if (t.kind === 'workday') {
     if (now >= t.windowOpen && now <= t.windowClose) {
       const next = nextInSequence(t, tp, now);
-      if (next) return ok(t, next);
+      if (next) return okRegular(t, next);
+      if (otAvailable(t)) return ok(t, 'OT_IN');
       return {
         code: 'SHIFT_COMPLETE',
         action: null,
@@ -157,10 +168,17 @@ export function determineNextAction(input: NextActionInput): NextActionResult {
   }
   const tm = plans.tomorrow;
   if (tm.kind === 'workday' && !hasPunches(punchesFor(tm)) && now >= tm.windowOpen && now <= tm.windowClose) {
-    return ok(tm, nextInSequence(tm, {}, now)!);
+    return okRegular(tm, nextInSequence(tm, {}, now)!);
   }
 
-  // (c) Explain why nothing is available today.
+  // (c) Outside the regular window, or on a rest day / holiday / no schedule:
+  // overtime is still available with a filed request.
+  if (otAvailable(t)) return ok({ ...t, unscheduled: t.kind !== 'workday' }, 'OT_IN');
+  if (tp.OT_OUT != null && t.kind !== 'workday') {
+    return { code: 'SHIFT_COMPLETE', action: null, plan: t, workDate: t.workDate, message: 'Your overtime for today is recorded.' };
+  }
+
+  // Explain why nothing is available today.
   if (t.kind === 'workday') {
     if (now < t.windowOpen) {
       return {
@@ -233,7 +251,27 @@ export interface DayContext {
  *   or all worked time on an unscheduled day. It is never auto-approved.
  * - Missing actions and absence are only reported after the shift cutoff.
  */
+/**
+ * Daily computation: regular attendance from the regular actions, with clocked
+ * overtime (Overtime In → Overtime Out) merged on top. Overtime is independent
+ * of the regular day: an overtime-only workday still shows the regular status
+ * (e.g. absent after cutoff), and rest days / holidays keep their status.
+ */
 export function computeDay(plan: ShiftPlan, punchesRaw: Punches, ctx: DayContext): DayComputation {
+  const regular: Punches = {};
+  for (const [k, v] of Object.entries(punchesRaw)) if (v != null && !OT_ACTIONS.includes(k as AttendanceAction)) regular[k as AttendanceAction] = v;
+  const r = computeRegular(plan, regular, ctx);
+  const otIn = punchesRaw.OT_IN ?? null;
+  const otOut = punchesRaw.OT_OUT ?? null;
+  if (otIn == null) return r;
+  const punches = { ...r.punches, OT_IN: otIn, ...(otOut != null ? { OT_OUT: otOut } : {}) };
+  if (otOut != null) return { ...r, punches, otWorkedMinutes: Math.max(0, toMinute(otOut) - toMinute(otIn)) };
+  if (now(ctx) <= otIn + (ctx.overtimeMaxHours ?? DEFAULT_OVERTIME_MAX_HOURS) * 3_600_000) return { ...r, punches, status: 'in_progress' };
+  const exceptions = r.exceptions.includes('MISSING_ACTION') ? r.exceptions : [...r.exceptions, 'MISSING_ACTION' as const];
+  return { ...r, punches, missingActions: [...r.missingActions, 'OT_OUT'], exceptions, status: r.status === 'completed' ? 'incomplete' : r.status };
+}
+
+function computeRegular(plan: ShiftPlan, punchesRaw: Punches, ctx: DayContext): DayComputation {
   const punches: Punches = {};
   for (const [k, v] of Object.entries(punchesRaw)) if (v != null) punches[k as AttendanceAction] = v;
   const exceptions = new Set<ExceptionCode>();
@@ -346,23 +384,13 @@ export function computeDay(plan: ShiftPlan, punchesRaw: Punches, ctx: DayContext
   const closed = now(ctx) > plan.windowClose;
   const missingAll = seq.filter((a) => punches[a] == null);
   const missing = closed ? missingAll : [];
-  // Clocked overtime (Overtime In → Overtime Out), separate from regular worked time.
-  let otWorked = 0;
-  let otOpen = false;
-  if (punches.OT_IN != null) {
-    if (punches.OT_OUT != null) otWorked = Math.max(0, toMinute(punches.OT_OUT) - toMinute(punches.OT_IN));
-    else if (now(ctx) > punches.OT_IN + (ctx.overtimeMaxHours ?? DEFAULT_OVERTIME_MAX_HOURS) * 3_600_000) missing.push('OT_OUT');
-    else otOpen = true;
-  }
   if (late > 0) exceptions.add('LATE');
   if (undertime > 0) exceptions.add('UNDERTIME');
   if (overtime > 0) exceptions.add('OVERTIME_CANDIDATE');
   if (missing.length) exceptions.add('MISSING_ACTION');
 
   let status: DayStatus;
-  if (missingAll.length === 0 && otOpen) status = 'in_progress';
-  else if (missingAll.length === 0 && !missing.includes('OT_OUT')) status = 'completed';
-  else if (missingAll.length === 0) status = 'incomplete';
+  if (missingAll.length === 0) status = 'completed';
   else if (!closed) status = 'in_progress';
   else status = 'incomplete';
 
@@ -371,7 +399,6 @@ export function computeDay(plan: ShiftPlan, punchesRaw: Punches, ctx: DayContext
     undertimeMinutes: undertime,
     workedMinutes: worked,
     overtimeCandidateMinutes: overtime,
-    otWorkedMinutes: otWorked,
     missingActions: missing,
     exceptions: [...exceptions],
   });
