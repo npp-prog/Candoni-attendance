@@ -140,6 +140,7 @@ function counts(list: DayRow[]) {
     undertimeMinutes: sum((r) => r.undertimeMinutes),
     workedMinutes: sum((r) => r.workedMinutes),
     overtimeCandidateMinutes: sum((r) => r.overtimeCandidateMinutes),
+    clockedOvertimeMinutes: sum((r) => r.otWorkedMinutes),
     approvedOvertimeMinutes: sum((r) => r.approvedOvertimeMinutes),
     correctedDays: list.filter((r) => r.correctedActions.length > 0).length,
   };

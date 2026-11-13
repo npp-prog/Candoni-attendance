@@ -102,7 +102,26 @@ async function planContext(caller: Caller, now: number) {
   return { tz, dates, sctx };
 }
 
-export function nextActionFrom(caller: Caller, now: number, plansIn: Record<'yesterday' | 'today' | 'tomorrow', ShiftPlan>, shifts: (ShiftDoc | null)[]): NextActionResult {
+/**
+ * Work dates (among the given ones) with a pending or approved overtime request.
+ * Overtime In is offered only for those dates; approval can come later.
+ */
+export async function overtimeRequestedFor(caller: Caller, dates: string[]): Promise<Record<string, boolean>> {
+  const snap = await col(caller.orgId, 'correctionRequests').where('memberId', '==', caller.uid).where('type', '==', 'overtime').get();
+  const out: Record<string, boolean> = {};
+  for (const d of snap.docs) {
+    if (dates.includes(d.get('workDate')) && ['pending', 'approved'].includes(d.get('status'))) out[d.get('workDate')] = true;
+  }
+  return out;
+}
+
+export function nextActionFrom(
+  caller: Caller,
+  now: number,
+  plansIn: Record<'yesterday' | 'today' | 'tomorrow', ShiftPlan>,
+  shifts: (ShiftDoc | null)[],
+  overtimeRequested: Record<string, boolean> = {},
+): NextActionResult {
   const s = caller.org.settings;
   const punches: Record<string, Punches> = {};
   const plans = { ...plansIn };
@@ -120,6 +139,7 @@ export function nextActionFrom(caller: Caller, now: number, plansIn: Record<'yes
     allowUnscheduled: s.allowUnscheduledAttendance,
     unscheduledMaxHours: s.unscheduledMaxHours,
     minActionIntervalSeconds: s.minActionIntervalSeconds,
+    overtimeRequested,
   });
 }
 
@@ -189,6 +209,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
       today: planFor(sctx, caller.uid, dates.today),
       tomorrow: planFor(sctx, caller.uid, dates.tomorrow),
     };
+    const otRequested = await overtimeRequestedFor(caller, [dates.yesterday, dates.today, dates.tomorrow]);
     const [workplaces, fieldwork] = await Promise.all([authorizedWorkplaces(caller.orgId, caller.member), activeFieldwork(caller.orgId, caller.uid, now)]);
 
     // Geofence evaluation (outside the transaction: pure computation on loaded data).
@@ -253,7 +274,7 @@ export async function processClock(uid: string | undefined, raw: unknown, nowFn:
       if (!memberSnap.get('active')) throw new Rejection('ACCOUNT_INACTIVE');
       const official = nowFn();
       const shifts = shiftSnaps.map((s) => (s.exists ? (s.data() as ShiftDoc) : null));
-      const next = nextActionFrom(caller, official, basePlans, shifts);
+      const next = nextActionFrom(caller, official, basePlans, shifts, otRequested);
       if (next.code !== 'OK') {
         throw new Rejection(next.code, next.availableAt ? { availableAt: next.availableAt } : undefined, next.message);
       }
@@ -372,11 +393,12 @@ export async function myToday(caller: Caller, nowFn: () => number = Date.now) {
     today: planFor(sctx, caller.uid, dates.today),
     tomorrow: planFor(sctx, caller.uid, dates.tomorrow),
   };
+  const otRequested = await overtimeRequestedFor(caller, [dates.yesterday, dates.today, dates.tomorrow]);
   const shiftSnaps = await Promise.all(
     [dates.yesterday, dates.today, dates.tomorrow].map((d) => col(caller.orgId, 'shiftInstances').doc(shiftId(caller.uid, d)).get()),
   );
   const shifts = shiftSnaps.map((s) => (s.exists ? (s.data() as ShiftDoc) : null));
-  const next = nextActionFrom(caller, now, basePlans, shifts);
+  const next = nextActionFrom(caller, now, basePlans, shifts, otRequested);
   const shift = shifts[[dates.yesterday, dates.today, dates.tomorrow].indexOf(next.workDate)];
   const [workplaces, fieldwork] = await Promise.all([authorizedWorkplaces(caller.orgId, caller.member), activeFieldwork(caller.orgId, caller.uid, now)]);
   return {

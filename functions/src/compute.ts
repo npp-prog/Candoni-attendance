@@ -24,7 +24,10 @@ export interface DayRow extends DayComputation {
   onLeave: boolean;
   hasFieldwork: boolean;
   hasWfh: boolean;
+  /** Approved overtime: clocked overtime capped at the approved minutes (or the approved minutes when no overtime was clocked). */
   approvedOvertimeMinutes: number;
+  /** Status of the day's overtime request, if any. */
+  overtimeStatus: 'none' | 'pending' | 'approved' | 'rejected';
   unscheduled: boolean;
   workplaceNames: string[];
 }
@@ -41,7 +44,7 @@ export async function computeRange(orgId: string, tz: string, members: MemberDoc
   const single = members.length === 1 ? members[0].uid : undefined;
   const fromMs = zonedToUtc(from, 0, tz) - 86_400_000;
   const toMs = zonedToUtc(addDays(to, 1), 0, tz) + 86_400_000;
-  const [sctx, shifts, leaves, fieldwork, otSnap, evSnap] = await Promise.all([
+  const [sctx, shifts, leaves, fieldwork, otSnap, evSnap, otReqSnap] = await Promise.all([
     loadScheduleContext(orgId, tz, from, to, single ? [single] : undefined),
     loadShifts(orgId, from, to, single ? { memberId: single } : undefined),
     leavesFor(orgId, from, to, single),
@@ -55,7 +58,22 @@ export async function computeRange(orgId: string, tz: string, members: MemberDoc
       .where('workDate', '<=', to)
       .select('memberId', 'workDate', 'workplaceName')
       .get(),
+    (single ? col(orgId, 'correctionRequests').where('memberId', '==', single) : col(orgId, 'correctionRequests'))
+      .where('workDate', '>=', from)
+      .where('workDate', '<=', to)
+      .select('memberId', 'workDate', 'type', 'status')
+      .get(),
   ]);
+  const otStatus = new Map<string, DayRow['overtimeStatus']>();
+  const rank = { none: 0, rejected: 1, pending: 2, approved: 3 } as const;
+  for (const d of otReqSnap.docs) {
+    if (d.get('type') !== 'overtime') continue;
+    const st = d.get('status') as string;
+    if (!['pending', 'approved', 'rejected'].includes(st)) continue;
+    const k = shiftId(d.get('memberId'), d.get('workDate'));
+    const cur = otStatus.get(k) ?? 'none';
+    if (rank[st as 'pending'] > rank[cur]) otStatus.set(k, st as DayRow['overtimeStatus']);
+  }
   const ot = new Map<string, number>();
   for (const d of otSnap.docs) {
     const k = shiftId(d.get('memberId'), d.get('workDate'));
@@ -94,13 +112,20 @@ export async function computeRange(orgId: string, tz: string, members: MemberDoc
         onLeave: leave,
         hasFieldwork: fw,
         hasWfh: wfh,
-        approvedOvertimeMinutes: ot.get(key) ?? 0,
+        approvedOvertimeMinutes: approvedOvertime(otStatus.get(key) ?? 'none', ot.get(key) ?? 0, c.otWorkedMinutes),
+        overtimeStatus: otStatus.get(key) ?? 'none',
         unscheduled: plan.unscheduled && Object.keys(shift?.punches ?? {}).length > 0,
         workplaceNames: [...(places.get(key) ?? [])],
       });
     }
   }
   return rows;
+}
+
+/** Approved overtime = clocked overtime capped at the approved minutes; without an overtime clock, the approved minutes. */
+export function approvedOvertime(status: DayRow['overtimeStatus'], approvedCap: number, clocked: number): number {
+  if (status !== 'approved') return 0;
+  return clocked > 0 ? Math.min(clocked, approvedCap) : approvedCap;
 }
 
 export function summarize(rows: DayRow[]) {

@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { processClock, attendanceRequestStatus, myToday } from '../src/attendance';
+import { handleApi } from '../src/api';
 import { col, loadCaller } from '../src/context';
 import { at, BASE, clearRateLimits, loc, north, rid, seedOrg, type Fixture } from './helpers';
 
@@ -238,5 +239,38 @@ describe('organization isolation', () => {
     expect(r).toMatchObject({ ok: false, code: 'NO_AUTHORIZED_WORKPLACE' });
     const evs = await col(f.orgId, 'attendanceEvents').where('memberId', '==', other.uid('emp1')).get();
     expect(evs.size).toBe(0);
+  });
+});
+
+describe('overtime clock', () => {
+  const DAY = '2026-02-27';
+  const otRequest = (status: string) =>
+    col(f.orgId, 'correctionRequests').add({
+      orgId: f.orgId, memberId: f.uid('emp1'), memberName: 'emp1 person', employeeNumber: 'x', departmentId: 'd1', type: 'overtime', workDate: DAY,
+      explanation: 'Month-end closing', minutes: 120, status, createdAt: Date.now(), reviewerUid: null, reviewerName: null, reviewerRemarks: null, reviewedAt: null,
+      action: null, proposedAt: null, fieldwork: null,
+    });
+
+  it('requires a filed request; a pending one is enough; Overtime Out works past the cutoff; approval caps the minutes', async () => {
+    const tin = at(DAY, '08:00');
+    const tout = at(DAY, '17:00');
+    expect((await clock('emp1', 'IN', tin, loc(BASE, tin))).ok).toBe(true);
+    expect((await clock('emp1', 'OUT', tout, loc(BASE, tout))).ok).toBe(true);
+    const t1 = at(DAY, '17:10');
+    expect(await clock('emp1', 'OT_IN', t1, loc(BASE, t1))).toMatchObject({ ok: false, code: 'SHIFT_COMPLETE' });
+
+    const req = await otRequest('pending');
+    expect(await clock('emp1', 'OT_IN', t1, loc(BASE, t1))).toMatchObject({ ok: true, action: 'OT_IN', workDate: DAY });
+    // 23:30 is after the regular cutoff (17:00 + 4h) but Overtime Out is still accepted.
+    const t2 = at(DAY, '23:30');
+    expect(await clock('emp1', 'OT_OUT', t2, loc(BASE, t2))).toMatchObject({ ok: true, action: 'OT_OUT', workDate: DAY });
+
+    await clearRateLimits(f.orgId);
+    type Row = { otWorkedMinutes: number; overtimeStatus: string; approvedOvertimeMinutes: number };
+    const report = async () => ((await handleApi(f.uid('hr'), { op: 'report.run', data: { type: 'daily', from: DAY, to: DAY, memberId: f.uid('emp1') } })) as { rows: Row[] }).rows[0];
+    expect(await report()).toMatchObject({ otWorkedMinutes: 380, overtimeStatus: 'pending', approvedOvertimeMinutes: 0 });
+    await handleApi(f.uid('hr'), { op: 'request.review', data: { id: req.id, decision: 'approve' } });
+    // Clocked 380 min, approved up to 120 min.
+    expect(await report()).toMatchObject({ overtimeStatus: 'approved', approvedOvertimeMinutes: 120 });
   });
 });

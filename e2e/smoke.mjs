@@ -198,6 +198,32 @@ try {
     const rec = await page.getByRole('dialog').innerText();
     check('Clocking at the approved home location is accepted and labelled Work from home', /Work from home/.test(rec));
     await page.screenshot({ path: `${SHOTS}/16-wfh-receipt.png` });
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    // Overtime: the regular day is complete; Overtime In appears only after filing a request (pending is enough).
+    await page.getByText(/file an overtime request first/).waitFor({ timeout: 20000 });
+    check('After the regular day, overtime needs a filed request', true);
+    await page.getByRole('link', { name: 'Requests', exact: true }).click();
+    await page.getByRole('button', { name: '+ New request' }).click();
+    await page.getByLabel('Request type').selectOption('overtime');
+    await page.getByLabel('Planned overtime (minutes)').fill('90');
+    await page.getByLabel('Explanation').fill('Month-end closing of accounts.');
+    await page.getByRole('button', { name: 'Submit for approval' }).click();
+    await page.getByText('Request submitted for review.').waitFor({ timeout: 20000 });
+    await page.getByRole('link', { name: 'Today', exact: true }).click();
+    const ot = page.getByRole('button', { name: 'Overtime In', exact: true });
+    await ot.waitFor({ timeout: 20000 });
+    await page.waitForTimeout(61000); // minimum interval since the last action
+    await ctx.setGeolocation(HOME); // fresh emulated fix
+    await page.reload();
+    await ot.click();
+    await page.getByRole('button', { name: /^Submit Overtime In/ }).click();
+    await page.getByRole('dialog', { name: 'Attendance recorded' }).waitFor({ timeout: 30000 });
+    check('Overtime In is accepted while the overtime request is still pending', /Overtime In accepted/.test(await page.getByRole('dialog').innerText()));
+    await page.screenshot({ path: `${SHOTS}/16b-overtime-in.png` });
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Overtime Out', exact: true }).waitFor({ timeout: 20000 });
+    check('Overtime Out is offered next', true);
     await ctx.close();
   }
 

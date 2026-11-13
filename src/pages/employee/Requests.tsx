@@ -27,7 +27,7 @@ export function RequestSummary({ r, tz }: { r: any; tz: string }) {
           <strong>{fmtDateTime(r.proposedAt, tz)}</strong>
         </p>
       )}
-      {r.type === 'overtime' && <p>Overtime requested: {r.minutes} min</p>}
+      {r.type === 'overtime' && <p>Planned overtime: up to {r.minutes} min</p>}
       {r.fieldwork && (
         <p>
           {r.type === 'wfh' || r.fieldwork.category === 'wfh' ? '🏠 ' : ''}
@@ -193,14 +193,14 @@ function NewRequest({ tz, wfhEnabled, onClose, onDone }: { tz: string; wfhEnable
           )}
         </Field>
         <Field label="Work date (shift date)" hint="For overnight shifts, use the date the shift started.">
-          {(id) => <Input id={id} type="date" value={workDate} max={remote ? addDays(today, 60) : today} onChange={(e) => setWorkDate(e.target.value)} />}
+          {(id) => <Input id={id} type="date" value={workDate} max={remote ? addDays(today, 60) : type === 'overtime' ? addDays(today, 31) : today} onChange={(e) => setWorkDate(e.target.value)} />}
         </Field>
         {(type === 'missing_punch' || type === 'incorrect_punch') && (
           <>
             <Field label="Attendance action">
               {(id) => (
                 <Select id={id} value={action} onChange={(e) => setAction(e.target.value as AttendanceAction)}>
-                  {(['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT'] as AttendanceAction[]).map((a) => (
+                  {(['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT', 'OT_IN', 'OT_OUT'] as AttendanceAction[]).map((a) => (
                     <option key={a} value={a}>
                       {ACTION_LABELS[a]}
                     </option>
@@ -211,7 +211,16 @@ function NewRequest({ tz, wfhEnabled, onClose, onDone }: { tz: string; wfhEnable
             <Field label={`Proposed time (${tz})`}>{(id) => <Input id={id} type="datetime-local" value={proposedAt} onChange={(e) => setProposedAt(e.target.value)} />}</Field>
           </>
         )}
-        {type === 'overtime' && <Field label="Overtime minutes">{(id) => <Input id={id} type="number" min={1} max={720} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />}</Field>}
+        {type === 'overtime' && (
+          <>
+            <Alert tone="info">
+              File this <strong>before</strong> working overtime. Once filed — even while still pending — you can tap <strong>Overtime In</strong> after your regular Clock Out / PM Out, and <strong>Overtime Out</strong> when you finish. Overtime counts as approved only after your supervisor or HR approves, up to the minutes below.
+            </Alert>
+            <Field label="Planned overtime (minutes)" hint="e.g. 120 for 2 hours. Approved overtime is the time you clock, up to this amount.">
+              {(id) => <Input id={id} type="number" min={1} max={720} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />}
+            </Field>
+          </>
+        )}
         {remote && (
           <>
             {isWfh && (

@@ -24,7 +24,7 @@ There is no public sign-up. Only administrators create accounts.
 - **Missing / incorrect attendance:** approving creates a separate **adjustment** (before → after, your name, reason). The original event is never changed.
 - **Fieldwork:** approving creates an authorization for the requested window, either at an alternate site geofence or with a location exemption. Revocations are audited.
 - **Work from home:** the employee pins their home location (or requests an exemption). Check the pin with the *map* link before approving. Approval creates a work-from-home authorization for the window; attendance inside it is labelled *Work from home* in the dashboard, history and reports. Turn WFH requests on or off in **Settings → Attendance policy**.
-- **Overtime:** approving records approved minutes separately from potential overtime.
+- **Overtime:** employees must file an overtime request to get the **Overtime In / Overtime Out** clock (a pending request is enough to clock; approval can come later). Approving sets the cap: approved overtime = clocked overtime up to the requested minutes. Reports show clocked overtime, the request status (pending / approved / not approved) and approved minutes. Without the overtime clock, approved minutes are used as requested. *Potential overtime* (staying after the scheduled end without the overtime clock) is shown separately and is never approved automatically.
 - **Explanations:** acknowledge or reject; they do not change attendance.
 
 You cannot review your own requests. A request can only be processed once. Rejections require a reason. When **Settings → Approval workflow** is *HR only*, supervisors can view but not approve.

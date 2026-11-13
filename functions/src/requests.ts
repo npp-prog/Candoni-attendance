@@ -51,7 +51,8 @@ export async function submitRequest(caller: Caller, raw: unknown, now = Date.now
   const today = localDate(now, tz);
   if (input.workDate < addDays(today, -MAX_PAST_DAYS)) throw new HttpsError('invalid-argument', `Requests must be within ${MAX_PAST_DAYS} days.`);
   if (input.type === 'wfh' && !caller.org.settings.wfhEnabled) throw new HttpsError('failed-precondition', 'Work-from-home requests are not enabled for your organization.');
-  const futureAllowed = input.type === 'fieldwork' || input.type === 'wfh' ? MAX_FUTURE_DAYS : 0;
+  // Fieldwork/WFH and overtime may be requested in advance.
+  const futureAllowed = input.type === 'fieldwork' || input.type === 'wfh' ? MAX_FUTURE_DAYS : input.type === 'overtime' ? 31 : 0;
   if (input.workDate > addDays(today, futureAllowed)) throw new HttpsError('invalid-argument', 'That date is in the future.');
 
   const doc: Record<string, unknown> = {
@@ -147,7 +148,8 @@ export async function cancelRequest(caller: Caller, raw: unknown) {
 
 /** Checks the effective punches follow the action sequence in time order. */
 export function sequenceIsConsistent(pattern: 'single' | 'split', punches: Partial<Record<AttendanceAction, number>>, unscheduled: boolean) {
-  const seq = actionSequence(unscheduled ? 'single' : pattern);
+  // Overtime actions follow the regular sequence.
+  const seq = [...actionSequence(unscheduled ? 'single' : pattern), 'OT_IN', 'OT_OUT'] as AttendanceAction[];
   let last = -Infinity;
   for (const a of seq) {
     const t = punches[a];

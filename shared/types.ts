@@ -13,8 +13,10 @@ export const ROLES: Role[] = ['employee', 'supervisor', 'hr', 'sysadmin'];
 
 export type SinglePatternAction = 'IN' | 'OUT';
 export type SplitPatternAction = 'AM_IN' | 'AM_OUT' | 'PM_IN' | 'PM_OUT';
-export type AttendanceAction = SinglePatternAction | SplitPatternAction;
-export const ALL_ACTIONS: AttendanceAction[] = ['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT'];
+/** Overtime is clocked after the regular day, only with a filed (pending or approved) overtime request. */
+export type OvertimeAction = 'OT_IN' | 'OT_OUT';
+export type AttendanceAction = SinglePatternAction | SplitPatternAction | OvertimeAction;
+export const ALL_ACTIONS: AttendanceAction[] = ['IN', 'OUT', 'AM_IN', 'AM_OUT', 'PM_IN', 'PM_OUT', 'OT_IN', 'OT_OUT'];
 
 export const ACTION_LABELS: Record<AttendanceAction, string> = {
   IN: 'Clock In',
@@ -23,6 +25,8 @@ export const ACTION_LABELS: Record<AttendanceAction, string> = {
   AM_OUT: 'AM Out',
   PM_IN: 'PM In',
   PM_OUT: 'PM Out',
+  OT_IN: 'Overtime In',
+  OT_OUT: 'Overtime Out',
 };
 
 export type SchedulePattern = 'single' | 'split';
@@ -267,6 +271,8 @@ export interface DayComputation {
   undertimeMinutes: number;
   workedMinutes: number;
   overtimeCandidateMinutes: number;
+  /** Minutes between Overtime In and Overtime Out (clocked overtime). */
+  otWorkedMinutes: number;
   missingActions: AttendanceAction[];
   exceptions: ExceptionCode[];
 }
